@@ -50,7 +50,7 @@ def show_directory():
 
 def get_package_version():
     try:
-        return version("twd")
+        return version("twd_m4sc0")
     except PackageNotFoundError:
         return "Unknown version"
 

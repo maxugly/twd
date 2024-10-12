@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="twd",
+    name="twd_m4sc0",
     version="1.1.0",
     packages=find_packages(),
     entry_points={
@@ -11,5 +11,12 @@ setup(
     },
     install_requires=[],
     author="m4sc0",
-    description="A tool to temporarily save and go to a working directory"
+    description="A tool to temporarily save and go to a working directory",
+    url="https://github.com/m4sc0/twd",
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
+    python_requires='>=3.6'
 )
