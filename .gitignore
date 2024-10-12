@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment directories
+.venv/
+env/
+venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Unit test / coverage results
+coverage/
+*.cover
+*.py,cover
+.cache
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Environment variable files (optional, if used)
+.env
+
+# Custom bash scripts
+testing.sh
