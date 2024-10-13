@@ -64,6 +64,13 @@ def show_directory(output=True, simple_output=False):
     else:
         output_handler(f"Current TWD: {TWD}", TWD, output, simple_output)
 
+def unset_directory(output=True, simple_output=False):
+    if not os.path.exists(TWD_FILE):
+        output_handler(f"No TWD file found", None, output, simple_output)
+    else:
+        os.remove(TWD_FILE)
+        output_handler(f"TWD File deleted and TWD unset", None, output, simple_output)
+
 def get_package_version():
     try:
         return version("twd_m4sc0")
@@ -76,6 +83,7 @@ def main():
     parser.add_argument('-s', '--save', nargs='?', const='', help="Save the current or specified directory")
     parser.add_argument('-g', '--go', action='store_true', help="Go to the saved directory")
     parser.add_argument('-l', '--list', action='store_true', help="Show saved TWD")
+    parser.add_argument('-u', '--unset', action='store_true', help="Unset the saved TWD")
     parser.add_argument('-v', '--version', action='version', version=f'TWD Version: {get_package_version()}', help='Show the current version of TWD installed')
     parser.add_argument('--shell', action='store_true', help="Output shell function for integration")
     parser.add_argument('--simple-output', action='store_true', help="Only print essential output (new directory, absolute path, etc.)")
@@ -105,6 +113,8 @@ def main():
         return go_to_directory(output, simple_output)
     elif args.list:
         show_directory(output, simple_output)
+    elif args.unset:
+        unset_directory(output, simple_output)
     else:
         parser.print_help()
         return 1
