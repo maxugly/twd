@@ -72,8 +72,8 @@ def main():
     parser.add_argument('-s', '--save', nargs='?', const='', help="Save the current or specified directory")
     parser.add_argument('-g', '--go', action='store_true', help="Go to the saved directory")
     parser.add_argument('-l', '--list', action='store_true', help="Show saved TWD")
-    parser.add_argument('--shell', action='store_true', help="Output shell function for integration")
     parser.add_argument('-v', '--version', action='version', version=f'TWD Version: {get_package_version()}', help='Show the current version of TWD installed')
+    parser.add_argument('--shell', action='store_true', help="Output shell function for integration")
     parser.add_argument('--simple-output', action='store_true', help="Only print essential output (new directory, absolute path, etc.)")
     parser.add_argument('--no-output', action='store_true', help="Prevents the console from sending output")
 
@@ -83,14 +83,16 @@ def main():
     simple_output = args.simple_output
 
     if args.shell:
-        print('''function twd() {
+        print('''
+        function twd() {
             output=$(python3 -m twd "$@")
             if [[ "$1" == "-g" ]]; then
                 eval "$output"
-            else {
+            else
                 echo "$output"
             fi
-        }''')
+        }
+        ''')
         return 0
 
     if args.save is not None:
