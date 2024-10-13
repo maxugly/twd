@@ -89,11 +89,11 @@ def main():
     if args.shell:
         print('''
         function twd() {
-            output=$(python3 -m twd "$@")
+            output=$(python3 -m twd "$@");
             if [[ "$1" == "-g" ]]; then
-                eval "$output"
+                eval "$output";
             else
-                echo "$output"
+                echo "$output";
             fi
         }
         ''')
