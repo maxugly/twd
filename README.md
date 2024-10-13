@@ -51,12 +51,13 @@ twd -g
 
 ```bash
 twd -l
+```
 
 ### Optional Parameters
 
 #### Simple Output
 
-Simpler output is meant to be for script usage
+Simpler output is meant to be for script or grep usage
 
 - Example with simple-output
 
@@ -66,6 +67,24 @@ user:~/.config $ twd -s --simple-output
 ```
 
 - Example without simple-output
+
+```bash
+user:~/.config $ twd -s
+Saved TWD to /home/user/.config
+```
+
+#### No Output
+
+No output is meant for just no output (impressive ik)
+
+- Example with no-output
+
+```bash
+user:~/.config $ twd -s --no-output
+# no output
+```
+
+- Example without no-output
 
 ```bash
 user:~/.config $ twd -s
