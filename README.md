@@ -53,6 +53,12 @@ twd -g
 twd -l
 ```
 
+- Unset the TWD and delete the file
+
+```bash
+twd -u
+```
+
 ### Optional Parameters
 
 #### Simple Output
