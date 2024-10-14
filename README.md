@@ -22,7 +22,7 @@ pip install twd-m4sc0
 2. Add the following line to your `.bashrc` or `.zshrc` to set up the shell function:
 
 ```bash
-eval $(twd --shell)
+eval $(python3 -m twd --shell)
 ```
 
 3. Exit and reopen the terminal or reload using:
@@ -95,6 +95,19 @@ user:~/.config $ twd -s --no-output
 ```bash
 user:~/.config $ twd -s
 Saved TWD to /home/user/.config
+```
+
+#### Force
+
+Forces an action
+
+> Currently only implemented on the `-u` flag
+
+- Example
+
+```bash
+user:~/.config $ twd -u --force
+TWD File deleted and TWD unset
 ```
 
 # Contribution

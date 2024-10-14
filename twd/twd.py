@@ -42,10 +42,10 @@ def get_absolute_path(path):
     return os.path.abspath(path)
 
 def output_handler(message=None, path=None, output=True, simple_output=False, message_type=0):
-    if not output:
+    if not output or CONFIG["output_behaviour"] == 0:
         return
 
-    if CONFIG["output_behaviour"] == 0:
+    if not message and not path:
         return
 
     if message_type == 1:
@@ -90,15 +90,22 @@ def go_to_directory(output=True, simple_output=False):
 def show_directory(output=True, simple_output=False):
     TWD = load_directory()
 
-    if TWD is None:
+    if TWD is None or TWD == '':
         output_handler("No TWD set", None, output, simple_output)
     else:
         output_handler(f"Current TWD: {TWD}", TWD, output, simple_output)
 
-def unset_directory(output=True, simple_output=False):
+def unset_directory(output=True, simple_output=False, force=False):
     if not os.path.exists(TWD_FILE):
         output_handler(f"No TWD file found", None, output, simple_output)
     else:
+        if not force:
+            output_handler(r'''
+If you want to execute unsetting the current TWD, please use "--force" and run again.
+
+
+This feature is to prevent accidental execution.''', None, True, False)
+            return
         os.remove(TWD_FILE)
         output_handler(f"TWD File deleted and TWD unset", None, output, simple_output)
 
@@ -121,24 +128,27 @@ def main():
     parser.add_argument('--shell', action='store_true', help="Output shell function for integration")
     parser.add_argument('--simple-output', action='store_true', help="Only print essential output (new directory, absolute path, etc.)")
     parser.add_argument('--no-output', action='store_true', help="Prevents the console from sending output")
-
+    parser.add_argument('-f', '--force', action='store_true', help="Force an action")
     args = parser.parse_args()
 
     output = not args.no_output
     simple_output = args.simple_output
 
     if args.shell:
-        print('''
+        print(r'''
         function twd() {
-            output=$(python3 -m twd "$@"); 
+            output=$(python3 -m twd "$@");
             while IFS= read -r line; do
-                type=$(echo "$line" | cut -d';' -f1); 
-                message=$(echo "$line" | cut -d';' -f2-); 
-                if [[ "$type" == "1" ]]; then 
-                    eval "$message"; 
-                else 
-                    echo "$message"; 
-                fi; 
+                if [[ -z "$line" ]]; then
+                    continue;
+                fi;
+                type=$(echo "$line" | cut -d';' -f1);
+                message=$(echo "$line" | cut -d';' -f2-);
+                if [[ "$type" == "1" ]]; then
+                    eval "$message";
+                else
+                    echo "$message";
+                fi;
             done <<< "$output";
         }
         ''')
@@ -151,7 +161,8 @@ def main():
     elif args.list:
         show_directory(output, simple_output)
     elif args.unset:
-        unset_directory(output, simple_output)
+        force = args.force
+        unset_directory(output, simple_output, force)
     else:
         parser.print_help()
         return 1
