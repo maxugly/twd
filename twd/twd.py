@@ -176,8 +176,8 @@ def main():
 
     # Optional Arguments/Flags
     parser.add_argument('-s', '--save', action='store_true', help="Save the current or specified directory")
-    parser.add_argument('-d', '--directory', help="Directory to save")
-    parser.add_argument('-a', '--alias', help="Alias for the saved directory")
+    parser.add_argument('-d', '--dir', nargs='?', help="Directory to save")
+    parser.add_argument('-a', '--ali', nargs='?', help="Alias for the saved directory")
     parser.add_argument('-g', '--go', action='store_true', help="Go to the saved directory")
     parser.add_argument('-l', '--list', action='store_true', help="Show saved TWD")
     parser.add_argument('-u', '--unset', action='store_true', help="Unset the saved TWD")
@@ -211,14 +211,14 @@ def main():
         ''')
         return 0
 
-    directory = args.directory or args.directory
-    alias = args.alias or args.alias
+    directory = args.directory or args.dir
+    alias = args.alias or args.ali
 
     if args.save:
         if not directory:
             directory = args.directory or os.getcwd()
 
-        alias = args.alias or args.alias
+        alias = args.alias or args.ali
 
         save_directory(directory, alias, output, simple_output)
     elif args.go:
