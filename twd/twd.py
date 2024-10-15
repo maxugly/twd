@@ -87,7 +87,7 @@ def save_directory(path=None, alias=None, output=True, simple_output=False):
     alias_id = create_alias_id()
     data[alias_id] = {
         "path": path,
-        "alias": alias or alias_id,
+        "alias": alias if alias else alias_id,
         "created_at": time.time()
     }
 
@@ -128,18 +128,31 @@ def show_directory(output=True, simple_output=False):
 
     if not dirs:
         output_handler("No TWD set", None, output, simple_output)
-    else:
-        for alias_id, entry in dirs.items():
-            output_handler(f"{entry['alias']} ({alias_id}) -> {entry['path']} | Saved at {entry['created_at']}", None, output, simple_output)
+        return
+
+    max_alias_len = max(len(entry['alias']) for entry in dirs.values()) if dirs else 0
+    max_id_len = max(len(alias_id) for alias_id in dirs.keys()) if dirs else 0
+    max_path_len = max(len(entry['path']) for entry in dirs.values()) if dirs else 0
+
+    header = f"{'Alias'.ljust(max_alias_len)}  {'ID'.ljust(max_id_len)}  {'Path'.ljust(max_path_len)}  Created At"
+    print(header)
+    print("-" * len(header))
+
+    for alias_id, entry in dirs.items():
+        alias = entry['alias'].ljust(max_alias_len)
+        path = entry['path'].ljust(max_path_len)
+        created_at = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry['created_at']))
+        alias_id_str = alias_id.ljust(max_id_len)
+        output_handler(f"{alias}  {alias_id_str}  {path}  {created_at}", None, output, simple_output)
+
 
 def unset_directory(output=True, simple_output=False, force=False):
     if not os.path.exists(TWD_FILE):
         output_handler(f"No TWD file found", None, output, simple_output)
     else:
         if not force:
-            output_handler(r'''
-If you want to execute unsetting the current TWD, please use "--force" and run again.
-
+            output_handler(r'''If you want to execute deleting and therefore unsetting all set TWD's, please use "--force" or "-f" and run again.
+                           
 
 This feature is to prevent accidental execution.''', None, True, False)
             return
@@ -169,10 +182,10 @@ def main():
     parser.add_argument('-l', '--list', action='store_true', help="Show saved TWD")
     parser.add_argument('-u', '--unset', action='store_true', help="Unset the saved TWD")
     parser.add_argument('-v', '--version', action='version', version=f'TWD Version: {get_package_version()}', help='Show the current version of TWD installed')
+    parser.add_argument('-f', '--force', action='store_true', help="Force an action")
     parser.add_argument('--shell', action='store_true', help="Output shell function for integration")
     parser.add_argument('--simple-output', action='store_true', help="Only print essential output (new directory, absolute path, etc.)")
     parser.add_argument('--no-output', action='store_true', help="Prevents the console from sending output")
-    parser.add_argument('-f', '--force', action='store_true', help="Force an action")
     args = parser.parse_args()
 
     output = not args.no_output
@@ -203,7 +216,10 @@ def main():
 
     if args.save:
         if not directory:
-            directory = os.getcwd()
+            directory = args.directory or os.getcwd()
+
+        alias = args.alias or args.alias
+
         save_directory(directory, alias, output, simple_output)
     elif args.go:
         return go_to_directory(output, simple_output)
