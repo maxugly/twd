@@ -288,7 +288,7 @@ def main():
     )
     parser.add_argument("-f", "--force", action="store_true", help="Force an action")
     parser.add_argument(
-        "--shell", action="store_true", help="Output shell function for integration"
+        "--shell", nargs="?", const="twd", help="Output shell function for integration"
     )
     parser.add_argument(
         "--simple-output",
@@ -306,8 +306,8 @@ def main():
     simple_output = args.simple_output
 
     if args.shell:
-        print(r"""
-        function twd() {
+        print(rf"""
+        function {args.shell}() {{
             output=$(python3 -m twd "$@");
             while IFS= read -r line; do
                 if [[ -z "$line" ]]; then
@@ -321,7 +321,7 @@ def main():
                     echo "$message";
                 fi;
             done <<< "$output";
-        }
+        }}
         """)
         return 0
 

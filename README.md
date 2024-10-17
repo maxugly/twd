@@ -23,8 +23,10 @@ pip install twd-m4sc0
 
 2. Add the following line to your `.bashrc` or `.zshrc` to set up the shell function:
 
+> Since 1.5.4 you can also set a different command for the `twd` program by replacing `[alias]` in the following code by your custom alias
+
 ```bash
-eval $(python3 -m twd --shell)
+eval $(python3 -m twd --shell [alias])
 ```
 
 3. Exit and reopen the terminal or reload using:
