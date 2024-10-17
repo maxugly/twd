@@ -1,12 +1,14 @@
+
 # twd-m4sc0
 
-`twd-m4sc0` is a command-line tool that allows you to temporarily save a working directory and easily navigate back to it. It's designed for developers and all users who frequently need to switch between directories in the terminal.
+`twd-m4sc0` is a command-line tool that allows you to temporarily save a working directory and easily navigate back to it. It's designed for developers and users who frequently need to switch between directories in the terminal.
 
 ## Features
 
-- Save the current working directory.
-- Go back to the saved directory.
-- List the saved directory.
+- Save the current or specified working directory.
+- Go back to a saved directory using an optional alias.
+- List all saved directories with metadata.
+- Unset and delete saved directories.
 - Integrates with your shell for seamless directory management.
 
 ## Installation
@@ -35,86 +37,94 @@ source ~/.zshrc
 
 ## Usage
 
-- Save a directory
+### Save a directory
+
+- Save the current directory or a specified directory:
 
 ```bash
-twd -s [path]
+twd -s [path] [alias]
 ```
 
-- Go to the saved directory
+If no path is specified, the current directory is saved. The alias is optional, and if not provided, an auto-generated ID will be used.
+
+### Go to a saved directory
+
+- Navigate to a saved directory using an optional alias:
 
 ```bash
-twd -g
+twd -g [alias]
 ```
 
-- List the saved directory
+If no alias is provided, the most recently saved directory will be used. If an alias is provided, it will navigate to the directory associated with that alias.
+
+### List saved directories
+
+- Display a list of all saved directories:
 
 ```bash
 twd -l
 ```
 
-- Unset the TWD and delete the file
+### Unset the TWD and delete the data file
+
+- Unset and delete the saved directories:
 
 ```bash
 twd -u
+```
+
+You can force this action using the `--force` flag to avoid accidental execution.
+
+```bash
+twd -u --force
 ```
 
 ### Optional Parameters
 
 #### Simple Output
 
-Simpler output is meant to be for script or grep usage
+For cleaner, minimal output intended for scripting or piping.
 
-- Example with simple-output
+- Example with `--simple-output`:
 
 ```bash
-user:~/.config $ twd -s --simple-output
+twd -s --simple-output
 /home/user/.config
 ```
 
-- Example without simple-output
+- Example without `--simple-output`:
 
 ```bash
-user:~/.config $ twd -s
 Saved TWD to /home/user/.config
 ```
 
 #### No Output
 
-No output is meant for just no output (impressive ik)
+Suppresses all output (including confirmation messages).
 
-- Example with no-output
-
-```bash
-user:~/.config $ twd -s --no-output
-# no output
-```
-
-- Example without no-output
+- Example with `--no-output`:
 
 ```bash
-user:~/.config $ twd -s
-Saved TWD to /home/user/.config
+twd -s --no-output
+# No output
 ```
 
 #### Force
 
-Forces an action
+Use the `--force` flag to force certain actions, such as when unsetting directories with the `-u` flag.
 
-> Currently only implemented on the `-u` flag
-
-- Example
+- Example:
 
 ```bash
-user:~/.config $ twd -u --force
+twd -u --force
 TWD File deleted and TWD unset
 ```
 
-# Contribution
+## Contribution
 
-To set up a dev environment:
+To set up a development environment:
 
-1. Clone the repo:
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/m4sc0/twd
@@ -126,3 +136,5 @@ cd twd
 ```bash
 pip install -e .
 ```
+
+3. Make your changes, and contribute!

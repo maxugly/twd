@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="twd_m4sc0",
-    version="1.5.2",
+    version="1.5.3",
     packages=find_packages(),
     entry_points={
         "console_scripts": [
@@ -18,7 +18,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
+    python_requires=">=3.6",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
 )
