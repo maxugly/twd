@@ -3,6 +3,8 @@
 
 `twd-m4sc0` is a command-line tool that allows you to temporarily save a working directory and easily navigate back to it. It's designed for developers and users who frequently need to switch between directories in the terminal.
 
+> All Versions `< v1.5` are considered deprecated and should not be used anymore because of the `config` file that was introduced in that version. This file is incompatible with newer versions and might cause issues or break the program. 
+
 ## Features
 
 - Save the current or specified working directory.
