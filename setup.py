@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="twd_m4sc0",
-    version="1.5.3",
+    version="1.5.4",
     packages=find_packages(),
     entry_points={
         "console_scripts": [
