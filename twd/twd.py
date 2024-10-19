@@ -6,6 +6,7 @@ import time
 import re
 from importlib.metadata import version, PackageNotFoundError
 from .logger import log, error
+from .screen import display_select
 
 TWD_DIR = os.path.join(os.path.expanduser("~"), ".twd")
 CONFIG_FILE = os.path.join(TWD_DIR, "config")
@@ -169,24 +170,46 @@ def go_to_directory(alias=None, output=True, simple_output=False):
         output_handler("No TWD found", None, output, simple_output)
         return 1
     else:
-        for entry_id, entry in dirs.items():
-            if "alias" in entry and entry["alias"] and entry["alias"] == alias:
-                TWD = entry["path"]
+        # use screen here
+        if alias:
+            for entry_id, entry in dirs.items():
+                if "alias" in entry and entry["alias"] and entry["alias"] == alias:
+                    TWD = entry["path"]
 
-                if os.path.exists(TWD):
-                    output_handler(
-                        f"cd {TWD}", TWD, output, simple_output, message_type=1
-                    )
-                    return 0
-                else:
-                    error(f"Directory does not exist: {TWD}", CONFIG)
-                    output_handler(
-                        f"Directory does not exist: {TWD}", None, output, simple_output
-                    )
-                    return 1
+                    if os.path.exists(TWD):
+                        output_handler(
+                            f"cd {TWD}", TWD, output, simple_output, message_type=1
+                        )
+                        return 0
+                    else:
+                        error(f"Directory does not exist: {TWD}", CONFIG)
+                        output_handler(
+                            f"Directory does not exist: {TWD}",
+                            None,
+                            output,
+                            simple_output,
+                        )
+                        return 1
 
-        output_handler("No TWD with alias found", None, output, simple_output)
-        return 1
+            output_handler("No TWD with alias found", None, output, simple_output)
+            return 1
+
+        selected_dir = display_select(CONFIG, dirs)
+        if selected_dir is None:
+            output_handler("No TWD selected", None, output, simple_output)
+            return 0
+        else:
+            TWD = selected_dir["path"]
+
+            if os.path.exists(TWD):
+                output_handler(f"cd {TWD}", TWD, output, simple_output, message_type=1)
+                return 0
+            else:
+                error(f"Directory does not exists: {TWD}", CONFIG)
+                output_handler(
+                    f"Directory does not exist: {TWD}", None, output, simple_output
+                )
+                return 1
 
 
 def show_directory(output=True, simple_output=False):
@@ -273,7 +296,7 @@ def main():
     parser.add_argument("-d", "--dir", nargs="?", help="Directory to save")
     parser.add_argument("-a", "--ali", nargs="?", help="Alias for the saved directory")
     parser.add_argument(
-        "-g", "--go", nargs="?", const=None, help="Go to the saved directory"
+        "-g", "--go", nargs="?", const=" ", help="Go to the saved directory"
     )
     parser.add_argument("-l", "--list", action="store_true", help="Show saved TWD")
     parser.add_argument(
@@ -308,19 +331,23 @@ def main():
     if args.shell:
         print(rf"""
         function {args.shell}() {{
-            output=$(python3 -m twd "$@");
-            while IFS= read -r line; do
-                if [[ -z "$line" ]]; then
-                    continue;
-                fi;
-                type=$(echo "$line" | cut -d';' -f1);
-                message=$(echo "$line" | cut -d';' -f2-);
-                if [[ "$type" == "1" ]]; then
-                    eval "$message";
-                else
-                    echo "$message";
-                fi;
-            done <<< "$output";
+            if [[ "$1" == "-g" || -z "$1" ]]; then
+                python3 -m twd "$@";
+            else
+                output=$(python3 -m twd "$@");
+                while IFS= read -r line; do
+                    if [[ -z "$line" ]]; then
+                        continue;
+                    fi;
+                    type=$(echo "$line" | cut -d';' -f1);
+                    message=$(echo "$line" | cut -d';' -f2-);
+                    if [[ "$type" == "1" ]]; then
+                        eval "$message";
+                    else
+                        echo "$message";
+                    fi;
+                done <<< "$output";
+            fi
         }}
         """)
         return 0
@@ -344,5 +371,5 @@ def main():
         force = args.force
         unset_directory(output, simple_output, force)
     else:
-        parser.print_help()
+        go_to_directory(None, output, simple_output)
         return 1
