@@ -98,19 +98,17 @@ def output_handler(
 ):
     log(f"Type: {message_type}, Msg: {message or path}", CONFIG)
 
-    if not output or CONFIG["output_behaviour"] == 0:
-        return
-
-    if not message and not path:
-        return
-
-    if message_type == 1:
-        print(f"1;{message}")
-    elif message_type == 0:
-        if simple_output and path:
-            print(f"0;{path}")
-        elif not simple_output and message:
-            print(f"0;{message}")
+    if CONFIG["output_behaviour"] == 1 or simple_output:
+        print("first if")
+        if path:
+            with open("/tmp/twd_path", "w") as f:
+                f.write(path)
+            print(path)
+    elif CONFIG["output_behaviour"] == 2:
+        if path:
+            with open("/tmp/twd_path", "w") as f:
+                f.write(path)
+        print(message)
 
 
 def save_directory(path=None, alias=None, output=True, simple_output=False):
@@ -157,43 +155,69 @@ def load_directory():
 
     try:
         with open(TWD_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            if not bool(data):
+                return None
+            else:
+                return data
     except json.JSONDecodeError as e:
         error(f"Error loading TWD file: {e}", CONFIG)
         return None
 
 
-def go_to_directory(alias=None, output=True, simple_output=False):
+def show_main(alias=None, output=True, simple_output=False):
     dirs = load_directory()
 
-    if not dirs:
+    if dirs is None:
         output_handler("No TWD found", None, output, simple_output)
         return 1
     else:
-        # use screen here
+        # use alias if provided
         if alias:
+            matched_dirs = []
+
             for entry_id, entry in dirs.items():
-                if "alias" in entry and entry["alias"] and entry["alias"] == alias:
-                    TWD = entry["path"]
+                if (
+                    "alias" in entry
+                    and entry["alias"]
+                    and entry["alias"].startswith(alias)
+                ):
+                    entry["id"] = entry_id
+                    matched_dirs.append(entry)
+                elif entry_id.startswith(alias):
+                    entry["id"] = entry_id
+                    matched_dirs.append(entry)
 
-                    if os.path.exists(TWD):
-                        output_handler(
-                            f"cd {TWD}", TWD, output, simple_output, message_type=1
-                        )
-                        return 0
-                    else:
-                        error(f"Directory does not exist: {TWD}", CONFIG)
-                        output_handler(
-                            f"Directory does not exist: {TWD}",
-                            None,
-                            output,
-                            simple_output,
-                        )
-                        return 1
+            if len(matched_dirs) == 1:
+                TWD = matched_dirs[0]["path"]
 
-            output_handler("No TWD with alias found", None, output, simple_output)
-            return 1
+                if os.path.exists(TWD):
+                    output_handler(
+                        f"cd {TWD}", TWD, output, simple_output, message_type=1
+                    )
+                    return 0
+                else:
+                    error(
+                        f"Directory does not exist: {TWD}", None, output, simple_output
+                    )
+                    return 1
+            elif len(matched_dirs) > 1:
+                output_handler(
+                    f"Multiple TWDs match for '{alias}':", None, output, simple_output
+                )
+                for match in matched_dirs:
+                    output_handler(
+                        f"{match['alias']}  {match['id']}  {match['path']}",
+                        None,
+                        output,
+                        simple_output,
+                    )
+                return 1
+            else:
+                output_handler("No TWD with alias found", None, output, simple_output)
+                return 1
 
+        # display selection using curses if alias is not given
         selected_dir = display_select(CONFIG, dirs)
         if selected_dir is None:
             output_handler("No TWD selected", None, output, simple_output)
@@ -244,7 +268,7 @@ def show_directory(output=True, simple_output=False):
 
 def unset_directory(output=True, simple_output=False, force=False):
     if not os.path.exists(TWD_FILE):
-        output_handler(f"No TWD file found", None, output, simple_output)
+        output_handler("No TWD file found", None, output, simple_output)
     else:
         if not force:
             output_handler(
@@ -262,7 +286,7 @@ This feature is to prevent accidental execution.""",
         except OSError as e:
             error(f"Error deleting TWD file: {e}", CONFIG)
             raise
-        output_handler(f"TWD File deleted and TWD unset", None, output, simple_output)
+        output_handler("TWD File deleted and TWD unset", None, output, simple_output)
 
 
 def get_package_version():
@@ -306,7 +330,7 @@ def main():
         "-v",
         "--version",
         action="version",
-        version=f"TWD Version: {get_package_version()}",
+        version=f"TWD Version: v{get_package_version()}",
         help="Show the current version of TWD installed",
     )
     parser.add_argument("-f", "--force", action="store_true", help="Force an action")
@@ -328,25 +352,14 @@ def main():
     output = not args.no_output
     simple_output = args.simple_output
 
+    # Shell function
     if args.shell:
         print(rf"""
         function {args.shell}() {{
-            if [[ "$1" == "-g" || -z "$1" ]]; then
-                python3 -m twd "$@";
-            else
-                output=$(python3 -m twd "$@");
-                while IFS= read -r line; do
-                    if [[ -z "$line" ]]; then
-                        continue;
-                    fi;
-                    type=$(echo "$line" | cut -d';' -f1);
-                    message=$(echo "$line" | cut -d';' -f2-);
-                    if [[ "$type" == "1" ]]; then
-                        eval "$message";
-                    else
-                        echo "$message";
-                    fi;
-                done <<< "$output";
+            python3 -m twd "$@"
+            if [[ -f /tmp/twd_path ]]; then
+                cd "$(cat /tmp/twd_path)"
+                /bin/rm -f /tmp/twd_path
             fi
         }}
         """)
@@ -364,12 +377,12 @@ def main():
         save_directory(directory, alias, output, simple_output)
     elif args.go:
         alias = args.go
-        return go_to_directory(alias, output, simple_output)
+        return show_main(alias, output, simple_output)
     elif args.list:
         show_directory(output, simple_output)
     elif args.unset:
         force = args.force
         unset_directory(output, simple_output, force)
     else:
-        go_to_directory(None, output, simple_output)
+        show_main(None, output, simple_output)
         return 1
