@@ -57,14 +57,51 @@ def display_select_screen(stdscr):
 
         draw_hr(stdscr, 2)
 
+        # Draw headers
+        min_alias_len = 5
+        min_id_len = 2
+        min_path_len = 4
+
+        max_alias_len = (
+            max(max(len(entry["alias"]) for entry in DIRS.values()), min_alias_len)
+            if DIRS
+            else min_alias_len
+        )
+        max_path_len = (
+            max(max(len(entry["path"]) for entry in DIRS.values()), min_path_len)
+            if DIRS
+            else min_path_len
+        )
+        max_id_len = (
+            max(max(len(alias_id) for alias_id in DIRS.keys()), min_id_len)
+            if DIRS
+            else min_id_len
+        )
+
+        alias_col = max_alias_len + 2
+        id_col = max_id_len + 2
+        path_col = max_path_len
+
+        alias_header = "ALIAS".ljust(alias_col, horizontal)
+        id_header = "ID".ljust(id_col, horizontal)
+        path_header = "PATH".ljust(path_col, horizontal)
+
+        header_text = f"{alias_header}{id_header}{path_header}"
+        stdscr.addstr(2, 1, header_text[:inner_width])
+
         # Selection process
         line_start = 3
         line_counter = line_start
+
         for entry_id, entry in enumerate(DIRS.values()):
             if line_counter >= inner_height:
                 break
 
-            line_text = f"{entry['alias']:<15} {entry['path']}"
+            alias = entry["alias"].ljust(max_alias_len)
+            path = entry["path"].ljust(max_path_len)
+            alias_id = list(DIRS.keys())[entry_id].ljust(max_id_len)
+
+            line_text = f"{alias}  {alias_id}  {path}"
             line_text = line_text[:inner_width]
             line_text = line_text + " " * (inner_width - len(line_text))
 
@@ -75,6 +112,7 @@ def display_select_screen(stdscr):
                 stdscr.addstr(line_counter, 1, line_text)
             line_counter += 1
 
+        # draw "command about to be executed"
         if pre_selected_path:
             draw_hr(stdscr, height - 4)
 
