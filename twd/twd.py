@@ -1,11 +1,12 @@
 import os
 import argparse
 import json
-import hashlib
 import time
 import re
 from importlib.metadata import version, PackageNotFoundError
 from .logger import log, error
+from .screen import display_select
+from . import crud
 
 TWD_DIR = os.path.join(os.path.expanduser("~"), ".twd")
 CONFIG_FILE = os.path.join(TWD_DIR, "config")
@@ -18,16 +19,10 @@ DEFAULT_CONFIG = {
     "log_format": "[$T]: $M",
 }
 
-# os.makedirs(TWD_DIR, exist_ok=True)
-
-
-def create_alias_id():
-    data = str(time.time()) + str(os.urandom(16))
-    return hashlib.sha256(data.encode()).hexdigest()[:12]
-
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        os.makedirs(TWD_DIR, exist_ok=True)
         with open(CONFIG_FILE, "w") as file:
             json.dump(DEFAULT_CONFIG, file, indent=4)
         return DEFAULT_CONFIG
@@ -42,20 +37,13 @@ def load_config():
 
 CONFIG = load_config()
 
-TWD_FILE = os.path.expanduser(CONFIG.get("data_file", "~/.twd/data"))
+# Ensure data files exist
+crud.ensure_data_file_exists(CONFIG)
+log_file = os.path.expanduser(CONFIG.get("log_file"))
+error_file = os.path.expanduser(CONFIG.get("error_file"))
 
 
-def ensure_data_file_exists():
-    if not os.path.exists(TWD_FILE):
-        try:
-            with open(TWD_FILE, "w") as f:
-                json.dump({}, f)
-        except OSError as e:
-            error(f"Error creating data file: {e}", CONFIG)
-
-    log_file = os.path.expanduser(CONFIG.get("log_file"))
-    error_file = os.path.expanduser(CONFIG.get("error_file"))
-
+def ensure_log_error_files():
     if not os.path.exists(log_file):
         try:
             with open(log_file, "w+") as f:
@@ -71,7 +59,7 @@ def ensure_data_file_exists():
             error(f"Error creating error file: {e}", CONFIG)
 
 
-ensure_data_file_exists()
+ensure_log_error_files()
 
 
 def get_absolute_path(path):
@@ -97,19 +85,18 @@ def output_handler(
 ):
     log(f"Type: {message_type}, Msg: {message or path}", CONFIG)
 
-    if not output or CONFIG["output_behaviour"] == 0:
-        return
-
-    if not message and not path:
-        return
-
-    if message_type == 1:
-        print(f"1;{message}")
-    elif message_type == 0:
-        if simple_output and path:
-            print(f"0;{path}")
-        elif not simple_output and message:
-            print(f"0;{message}")
+    if CONFIG["output_behaviour"] == 1 or simple_output:
+        if path:
+            with open("/tmp/twd_path", "w") as f:
+                f.write(path)
+            if output:
+                print(path)
+    elif CONFIG["output_behaviour"] == 2:
+        if path:
+            with open("/tmp/twd_path", "w") as f:
+                f.write(path)
+        if output:
+            print(message)
 
 
 def save_directory(path=None, alias=None, output=True, simple_output=False):
@@ -121,26 +108,8 @@ def save_directory(path=None, alias=None, output=True, simple_output=False):
     if alias:
         alias = validate_alias(alias)
 
-    try:
-        with open(TWD_FILE, "r") as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        error(f"Error reading TWD file: {e}", CONFIG)
-        data = {}
-
-    alias_id = create_alias_id()
-    data[alias_id] = {
-        "path": path,
-        "alias": alias if alias else alias_id,
-        "created_at": time.time(),
-    }
-
-    try:
-        with open(TWD_FILE, "w") as f:
-            json.dump(data, f, indent=4)
-    except OSError as e:
-        error(f"Error writing to TWD file: {e}", CONFIG)
-        raise
+    data = crud.load_data(CONFIG)
+    alias_id = crud.create_entry(CONFIG, data, path, alias)
 
     output_handler(
         f"Saved TWD to {path} with alias '{alias or alias_id}'",
@@ -151,27 +120,35 @@ def save_directory(path=None, alias=None, output=True, simple_output=False):
 
 
 def load_directory():
-    if not os.path.exists(TWD_FILE):
-        return None
-
-    try:
-        with open(TWD_FILE, "r") as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        error(f"Error loading TWD file: {e}", CONFIG)
-        return None
+    data = crud.load_data(CONFIG)
+    return data if data else None
 
 
-def go_to_directory(alias=None, output=True, simple_output=False):
+def show_main(alias=None, output=True, simple_output=False):
     dirs = load_directory()
 
-    if not dirs:
+    if dirs is None:
         output_handler("No TWD found", None, output, simple_output)
         return 1
     else:
-        for entry_id, entry in dirs.items():
-            if "alias" in entry and entry["alias"] and entry["alias"] == alias:
-                TWD = entry["path"]
+        # Use alias if provided
+        if alias:
+            matched_dirs = []
+
+            for entry_id, entry in dirs.items():
+                if (
+                    "alias" in entry
+                    and entry["alias"]
+                    and entry["alias"].startswith(alias)
+                ):
+                    entry["id"] = entry_id
+                    matched_dirs.append(entry)
+                elif entry_id.startswith(alias):
+                    entry["id"] = entry_id
+                    matched_dirs.append(entry)
+
+            if len(matched_dirs) == 1:
+                TWD = matched_dirs[0]["path"]
 
                 if os.path.exists(TWD):
                     output_handler(
@@ -184,9 +161,39 @@ def go_to_directory(alias=None, output=True, simple_output=False):
                         f"Directory does not exist: {TWD}", None, output, simple_output
                     )
                     return 1
+            elif len(matched_dirs) > 1:
+                output_handler(
+                    f"Multiple TWDs match for '{alias}':", None, output, simple_output
+                )
+                for match in matched_dirs:
+                    output_handler(
+                        f"{match['alias']}  {match['id']}  {match['path']}",
+                        None,
+                        output,
+                        simple_output,
+                    )
+                return 1
+            else:
+                output_handler("No TWD with alias found", None, output, simple_output)
+                return 1
 
-        output_handler("No TWD with alias found", None, output, simple_output)
-        return 1
+        # Display selection using curses if alias is not given
+        selected_dir = display_select(CONFIG, dirs)
+        if selected_dir is None:
+            output_handler("No TWD selected", None, output, simple_output)
+            return 0
+        else:
+            TWD = selected_dir["path"]
+
+            if os.path.exists(TWD):
+                output_handler(f"cd {TWD}", TWD, output, simple_output, message_type=1)
+                return 0
+            else:
+                error(f"Directory does not exist: {TWD}", CONFIG)
+                output_handler(
+                    f"Directory does not exist: {TWD}", None, output, simple_output
+                )
+                return 1
 
 
 def show_directory(output=True, simple_output=False):
@@ -220,26 +227,22 @@ def show_directory(output=True, simple_output=False):
 
 
 def unset_directory(output=True, simple_output=False, force=False):
-    if not os.path.exists(TWD_FILE):
-        output_handler(f"No TWD file found", None, output, simple_output)
-    else:
-        if not force:
-            output_handler(
-                r"""If you want to execute deleting and therefore unsetting all set TWD's, please use "--force" or "-f" and run again.
-                           
+    if not force:
+        output_handler(
+            r"""If you want to execute deleting and therefore unsetting all set TWD's, please use "--force" or "-f" and run again.
 
 This feature is to prevent accidental execution.""",
-                None,
-                True,
-                False,
-            )
-            return
-        try:
-            os.remove(TWD_FILE)
-        except OSError as e:
-            error(f"Error deleting TWD file: {e}", CONFIG)
-            raise
-        output_handler(f"TWD File deleted and TWD unset", None, output, simple_output)
+            None,
+            True,
+            False,
+        )
+        return
+    try:
+        crud.delete_data_file(CONFIG)
+    except OSError as e:
+        error(f"Error deleting TWD file: {e}", CONFIG)
+        raise
+    output_handler("TWD File deleted and TWD unset", None, output, simple_output)
 
 
 def get_package_version():
@@ -251,8 +254,6 @@ def get_package_version():
 
 
 def main():
-    global TWD_FILE
-
     parser = argparse.ArgumentParser(
         description="Temporarily save and navigate to working directories."
     )
@@ -273,7 +274,7 @@ def main():
     parser.add_argument("-d", "--dir", nargs="?", help="Directory to save")
     parser.add_argument("-a", "--ali", nargs="?", help="Alias for the saved directory")
     parser.add_argument(
-        "-g", "--go", nargs="?", const=None, help="Go to the saved directory"
+        "-g", "--go", nargs="?", const=" ", help="Go to the saved directory"
     )
     parser.add_argument("-l", "--list", action="store_true", help="Show saved TWD")
     parser.add_argument(
@@ -283,7 +284,7 @@ def main():
         "-v",
         "--version",
         action="version",
-        version=f"TWD Version: {get_package_version()}",
+        version=f"TWD Version: v{get_package_version()}",
         help="Show the current version of TWD installed",
     )
     parser.add_argument("-f", "--force", action="store_true", help="Force an action")
@@ -305,24 +306,17 @@ def main():
     output = not args.no_output
     simple_output = args.simple_output
 
+    # Shell function
     if args.shell:
         print(rf"""
-        function {args.shell}() {{
-            output=$(python3 -m twd "$@");
-            while IFS= read -r line; do
-                if [[ -z "$line" ]]; then
-                    continue;
-                fi;
-                type=$(echo "$line" | cut -d';' -f1);
-                message=$(echo "$line" | cut -d';' -f2-);
-                if [[ "$type" == "1" ]]; then
-                    eval "$message";
-                else
-                    echo "$message";
-                fi;
-            done <<< "$output";
-        }}
-        """)
+function {args.shell}() {{
+    python3 -m twd "$@"
+    if [[ -f /tmp/twd_path ]]; then
+        cd "$(cat /tmp/twd_path)"
+        /bin/rm -f /tmp/twd_path
+    fi
+}}
+""")
         return 0
 
     directory = args.directory or args.dir
@@ -330,19 +324,24 @@ def main():
 
     if args.save:
         if not directory:
-            directory = args.directory or os.getcwd()
+            directory = os.getcwd()
 
         alias = args.alias or args.ali
 
         save_directory(directory, alias, output, simple_output)
     elif args.go:
         alias = args.go
-        return go_to_directory(alias, output, simple_output)
+        return show_main(alias, output, simple_output)
     elif args.list:
         show_directory(output, simple_output)
     elif args.unset:
         force = args.force
         unset_directory(output, simple_output, force)
     else:
-        parser.print_help()
+        show_main(None, output, simple_output)
         return 1
+
+
+if __name__ == "__main__":
+    main()
+
