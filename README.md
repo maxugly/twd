@@ -12,6 +12,7 @@
 - List all saved directories with metadata.
 - Unset and delete saved directories.
 - Integrates with your shell for seamless directory management.
+- Some options can be configured using the `config` file. For more information please visit the [Config](CONFIG.md) documentation.
 
 ## Installation
 

@@ -1,12 +1,12 @@
 import os
 import argparse
 import json
-import hashlib
 import time
 import re
 from importlib.metadata import version, PackageNotFoundError
 from .logger import log, error
 from .screen import display_select
+from . import crud
 
 TWD_DIR = os.path.join(os.path.expanduser("~"), ".twd")
 CONFIG_FILE = os.path.join(TWD_DIR, "config")
@@ -19,16 +19,10 @@ DEFAULT_CONFIG = {
     "log_format": "[$T]: $M",
 }
 
-# os.makedirs(TWD_DIR, exist_ok=True)
-
-
-def create_alias_id():
-    data = str(time.time()) + str(os.urandom(16))
-    return hashlib.sha256(data.encode()).hexdigest()[:12]
-
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        os.makedirs(TWD_DIR, exist_ok=True)
         with open(CONFIG_FILE, "w") as file:
             json.dump(DEFAULT_CONFIG, file, indent=4)
         return DEFAULT_CONFIG
@@ -43,20 +37,13 @@ def load_config():
 
 CONFIG = load_config()
 
-TWD_FILE = os.path.expanduser(CONFIG.get("data_file", "~/.twd/data"))
+# Ensure data files exist
+crud.ensure_data_file_exists(CONFIG)
+log_file = os.path.expanduser(CONFIG.get("log_file"))
+error_file = os.path.expanduser(CONFIG.get("error_file"))
 
 
-def ensure_data_file_exists():
-    if not os.path.exists(TWD_FILE):
-        try:
-            with open(TWD_FILE, "w") as f:
-                json.dump({}, f)
-        except OSError as e:
-            error(f"Error creating data file: {e}", CONFIG)
-
-    log_file = os.path.expanduser(CONFIG.get("log_file"))
-    error_file = os.path.expanduser(CONFIG.get("error_file"))
-
+def ensure_log_error_files():
     if not os.path.exists(log_file):
         try:
             with open(log_file, "w+") as f:
@@ -72,7 +59,7 @@ def ensure_data_file_exists():
             error(f"Error creating error file: {e}", CONFIG)
 
 
-ensure_data_file_exists()
+ensure_log_error_files()
 
 
 def get_absolute_path(path):
@@ -99,16 +86,17 @@ def output_handler(
     log(f"Type: {message_type}, Msg: {message or path}", CONFIG)
 
     if CONFIG["output_behaviour"] == 1 or simple_output:
-        print("first if")
         if path:
             with open("/tmp/twd_path", "w") as f:
                 f.write(path)
-            print(path)
+            if output:
+                print(path)
     elif CONFIG["output_behaviour"] == 2:
         if path:
             with open("/tmp/twd_path", "w") as f:
                 f.write(path)
-        print(message)
+        if output:
+            print(message)
 
 
 def save_directory(path=None, alias=None, output=True, simple_output=False):
@@ -120,26 +108,8 @@ def save_directory(path=None, alias=None, output=True, simple_output=False):
     if alias:
         alias = validate_alias(alias)
 
-    try:
-        with open(TWD_FILE, "r") as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        error(f"Error reading TWD file: {e}", CONFIG)
-        data = {}
-
-    alias_id = create_alias_id()
-    data[alias_id] = {
-        "path": path,
-        "alias": alias if alias else alias_id,
-        "created_at": time.time(),
-    }
-
-    try:
-        with open(TWD_FILE, "w") as f:
-            json.dump(data, f, indent=4)
-    except OSError as e:
-        error(f"Error writing to TWD file: {e}", CONFIG)
-        raise
+    data = crud.load_data(CONFIG)
+    alias_id = crud.create_entry(CONFIG, data, path, alias)
 
     output_handler(
         f"Saved TWD to {path} with alias '{alias or alias_id}'",
@@ -150,19 +120,8 @@ def save_directory(path=None, alias=None, output=True, simple_output=False):
 
 
 def load_directory():
-    if not os.path.exists(TWD_FILE):
-        return None
-
-    try:
-        with open(TWD_FILE, "r") as f:
-            data = json.load(f)
-            if not bool(data):
-                return None
-            else:
-                return data
-    except json.JSONDecodeError as e:
-        error(f"Error loading TWD file: {e}", CONFIG)
-        return None
+    data = crud.load_data(CONFIG)
+    return data if data else None
 
 
 def show_main(alias=None, output=True, simple_output=False):
@@ -172,7 +131,7 @@ def show_main(alias=None, output=True, simple_output=False):
         output_handler("No TWD found", None, output, simple_output)
         return 1
     else:
-        # use alias if provided
+        # Use alias if provided
         if alias:
             matched_dirs = []
 
@@ -197,7 +156,8 @@ def show_main(alias=None, output=True, simple_output=False):
                     )
                     return 0
                 else:
-                    error(
+                    error(f"Directory does not exist: {TWD}", CONFIG)
+                    output_handler(
                         f"Directory does not exist: {TWD}", None, output, simple_output
                     )
                     return 1
@@ -217,7 +177,7 @@ def show_main(alias=None, output=True, simple_output=False):
                 output_handler("No TWD with alias found", None, output, simple_output)
                 return 1
 
-        # display selection using curses if alias is not given
+        # Display selection using curses if alias is not given
         selected_dir = display_select(CONFIG, dirs)
         if selected_dir is None:
             output_handler("No TWD selected", None, output, simple_output)
@@ -229,7 +189,7 @@ def show_main(alias=None, output=True, simple_output=False):
                 output_handler(f"cd {TWD}", TWD, output, simple_output, message_type=1)
                 return 0
             else:
-                error(f"Directory does not exists: {TWD}", CONFIG)
+                error(f"Directory does not exist: {TWD}", CONFIG)
                 output_handler(
                     f"Directory does not exist: {TWD}", None, output, simple_output
                 )
@@ -267,26 +227,22 @@ def show_directory(output=True, simple_output=False):
 
 
 def unset_directory(output=True, simple_output=False, force=False):
-    if not os.path.exists(TWD_FILE):
-        output_handler("No TWD file found", None, output, simple_output)
-    else:
-        if not force:
-            output_handler(
-                r"""If you want to execute deleting and therefore unsetting all set TWD's, please use "--force" or "-f" and run again.
-                           
+    if not force:
+        output_handler(
+            r"""If you want to execute deleting and therefore unsetting all set TWD's, please use "--force" or "-f" and run again.
 
 This feature is to prevent accidental execution.""",
-                None,
-                True,
-                False,
-            )
-            return
-        try:
-            os.remove(TWD_FILE)
-        except OSError as e:
-            error(f"Error deleting TWD file: {e}", CONFIG)
-            raise
-        output_handler("TWD File deleted and TWD unset", None, output, simple_output)
+            None,
+            True,
+            False,
+        )
+        return
+    try:
+        crud.delete_data_file(CONFIG)
+    except OSError as e:
+        error(f"Error deleting TWD file: {e}", CONFIG)
+        raise
+    output_handler("TWD File deleted and TWD unset", None, output, simple_output)
 
 
 def get_package_version():
@@ -298,8 +254,6 @@ def get_package_version():
 
 
 def main():
-    global TWD_FILE
-
     parser = argparse.ArgumentParser(
         description="Temporarily save and navigate to working directories."
     )
@@ -355,14 +309,14 @@ def main():
     # Shell function
     if args.shell:
         print(rf"""
-        function {args.shell}() {{
-            python3 -m twd "$@"
-            if [[ -f /tmp/twd_path ]]; then
-                cd "$(cat /tmp/twd_path)"
-                /bin/rm -f /tmp/twd_path
-            fi
-        }}
-        """)
+function {args.shell}() {{
+    python3 -m twd "$@"
+    if [[ -f /tmp/twd_path ]]; then
+        cd "$(cat /tmp/twd_path)"
+        /bin/rm -f /tmp/twd_path
+    fi
+}}
+""")
         return 0
 
     directory = args.directory or args.dir
@@ -370,7 +324,7 @@ def main():
 
     if args.save:
         if not directory:
-            directory = args.directory or os.getcwd()
+            directory = os.getcwd()
 
         alias = args.alias or args.ali
 
@@ -386,3 +340,8 @@ def main():
     else:
         show_main(None, output, simple_output)
         return 1
+
+
+if __name__ == "__main__":
+    main()
+
