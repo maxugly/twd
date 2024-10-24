@@ -310,11 +310,11 @@ def main():
     if args.shell:
         print(rf"""
 function {args.shell}() {{
-    python3 -m twd "$@"
+    python3 -m twd "$@";
     if [[ -f /tmp/twd_path ]]; then
-        cd "$(cat /tmp/twd_path)"
-        /bin/rm -f /tmp/twd_path
-    fi
+        cd "$(cat /tmp/twd_path)";
+        /bin/rm -f /tmp/twd_path;
+    fi;
 }}
 """)
         return 0
@@ -344,4 +344,3 @@ function {args.shell}() {{
 
 if __name__ == "__main__":
     main()
-
