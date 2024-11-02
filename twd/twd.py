@@ -248,6 +248,16 @@ This feature is to prevent accidental execution.""",
     output_handler("TWD File deleted and TWD unset", None, output, simple_output)
 
 
+def setup(alias):
+    bashrc_path = os.path.expanduser("~/.bashrc")
+    alias = "twd" if not alias else alias
+    with open(bashrc_path, "a") as file:
+        file.write(f"\neval $(python3 -m twd --shell {alias})\n")
+    print("Please execute the following command to activate TWD:")
+    print("")
+    print(f"source {bashrc_path}")
+
+
 def get_package_version():
     try:
         return version("twd_m4sc0")
@@ -259,6 +269,10 @@ def get_package_version():
 def main():
     parser = argparse.ArgumentParser(
         description="Temporarily save and navigate to working directories."
+    )
+
+    parser.add_argument(
+        "--setup", nargs="?", const="twd", help="Automatic setup in the .bashrc file"
     )
 
     parser.add_argument("directory", nargs="?", help="Directory to save")
@@ -311,6 +325,10 @@ def main():
                 /bin/rm -f /tmp/twd_path;
             fi;
         }}""")
+        return 0
+
+    if args.setup:
+        setup(args.setup)
         return 0
 
     directory = args.directory or args.dir
