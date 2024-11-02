@@ -2,6 +2,14 @@
 
 All changes to this project are documented in this file starting at v1.5.3
 
+## v2.0.2 / 2024-11-02
+
+### Added
+
+- The `setup` flag can be used to automatically append the shell function to the user's `.bashrc` files
+
+---
+
 ## v2.0.1 / 2024-11-02
 
 ### Added
@@ -12,6 +20,8 @@ All changes to this project are documented in this file starting at v1.5.3
 
 - Fixed issue in `shell` function which prevented the `cd` command from being executed
 - Fixed issues during logging
+
+---
 
 ## v2.0.0 / 2024-10-23
 
