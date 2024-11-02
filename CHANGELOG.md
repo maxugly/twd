@@ -2,7 +2,18 @@
 
 All changes to this project are documented in this file starting at v1.5.3
 
-## v2.0.0 / 2024-10- ##
+## v2.0.1 / 2024-11-02
+
+### Added
+
+- Log rotation using the `logging` module
+
+### Changed
+
+- Fixed issue in `shell` function which prevented the `cd` command from being executed
+- Fixed issues during logging
+
+## v2.0.0 / 2024-10-23
 
 ### Added
 
