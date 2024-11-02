@@ -2,7 +2,10 @@ import curses
 import time
 import os
 from . import crud
-from .logger import error
+import logging
+
+log = logging.getLogger("log")
+error_log = logging.getLogger("error")
 
 CONFIG = None
 DIRS = None
@@ -163,7 +166,7 @@ def display_select_screen(stdscr):
                 try:
                     crud.delete_entry(CONFIG, data, selected_entry_id)
                 except KeyError:
-                    error(f"Entry ID {selected_entry_id} not found", CONFIG)
+                    error_log.error(f"Entry ID {selected_entry_id} not found")
                 del filtered_DIRS[selected_entry_id]
                 if selected_entry >= len(filtered_DIRS):
                     selected_entry = max(len(filtered_DIRS) - 1, 0)
@@ -196,4 +199,3 @@ def display_select(config, dirs):
     original_DIRS = DIRS
     search_query = ""
     return curses.wrapper(display_select_screen)
-
