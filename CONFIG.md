@@ -14,7 +14,7 @@ The config utilizes JSON for easy read/write using Python's `json` module.
 
 Describes the location of the file that contains the saved `TWD`
 
-Default value: "~/.twd/data"
+Default value: `~/.twd/data`
 
 - `output_behaviour`
 
@@ -26,4 +26,44 @@ Possible values: 0, 1 and 2
 1: Minimal/Simple output (similar to `--simple-output`)
 2: Full output
 
-Default value: 2
+Default value: `2`
+
+- `log_file`
+
+Describes where to store logs created by `TWD`
+
+Default value: `~/.twd/log`
+
+- `error_file`
+
+Describes where to store errors that occured during the use of `TWD`
+
+Default value: `~/.twd/error`
+
+- `log_format`
+
+Describes the way logs should be stored in the `log_file` and `error_file`
+
+Possible parameters can be found on the [Logging Official Documentation](https://docs.python.org/3/library/logging.html#logrecord-attributes)
+
+Default value: `%(asctime)s - %(levelname)s - %(message)s`
+
+- `log_level`
+
+Describes the log level to be used while logging
+
+Possible parameters can be found on the [Logging Official Documentation](https://docs.python.org/3/library/logging.html#logging-levels)
+
+Default value: `INFO`
+
+- `log_max_bytes`
+
+Describes the max amount of bytes a log file can have before log rotation hits
+
+Default value: `5242880` = `5 MiB`
+
+- `log_backup_count`
+
+Describtes how many log files log rotation can have at max
+
+Default value: `3`

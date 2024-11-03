@@ -1,9 +1,8 @@
-
 # twd-m4sc0
 
 `twd-m4sc0` is a command-line tool that allows you to temporarily save a working directory and easily navigate back to it. It's designed for developers and users who frequently need to switch between directories in the terminal.
 
-> All Versions `< v1.5` are considered deprecated and should not be used anymore because of the `config` file that was introduced in that version. This file is incompatible with newer versions and might cause issues or break the program. 
+> All Versions `< v1.5` are considered deprecated and should not be used anymore because of the `config` file that was introduced in that version. This file is incompatible with newer versions and might cause issues or break the program.
 
 ## Features
 
@@ -16,7 +15,7 @@
 
 ## Installation
 
-### Installation using `pip`:
+### Installation using `pip`
 
 1. Install the package from the `pypi` repository:
 
@@ -24,19 +23,41 @@
 pip install twd-m4sc0
 ```
 
-2. Add the following line to your `.bashrc` or `.zshrc` to set up the shell function:
+2. Ensure proper installation by checking the version
 
-> Since 1.5.4 you can also set a different command for the `twd` program by replacing `[alias]` in the following code by your custom alias
+```bash
+python3 -m twd -v
+```
+
+### Setup using in-built commands
+
+> This setup information is only recommend if you're system is using the `.bashrc` file provided by debian based systems and it's located at `~/.bashrc`. If you're unsure what you're shell configuration file is called or where it's located please refer to your official OS documentation to ensure proper functionality.
+
+1. Run the following command to activate the `twd` shell function
+
+> Replace `[alias]` with an alias of your choice to customize the way you're calling the script and follow the given instructions
+
+```bash
+python3 -m twd --setup [alias]
+```
+
+### Manual setup
+
+1. Add the following line to your shell configuration file:
 
 ```bash
 eval $(python3 -m twd --shell [alias])
 ```
 
-3. Exit and reopen the terminal or reload using:
+2. Run the following command to apply the new configuration:
 
 ```bash
 source ~/.bashrc
-# or
+```
+
+or
+
+```bash
 source ~/.zshrc
 ```
 
