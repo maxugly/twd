@@ -18,6 +18,7 @@ CONFIG_FILE = os.path.join(TWD_DIR, "config")
 DEFAULT_CONFIG = {
     "data_file": os.path.expanduser("~/.twd/data"),
     "output_behaviour": 2,
+    "clear_after_screen": False,
     "log_file": os.path.expanduser("~/.twd/log"),
     "error_file": os.path.expanduser("~/.twd/error"),
     "log_format": "%(asctime)s - %(levelname)s - %(message)s",
@@ -92,18 +93,24 @@ def validate_alias(alias):
 def output_handler(
     message=None, path=None, output=True, simple_output=False, message_type=0
 ):
-    log.info(f"Type: {message_type}, Msg: {message or path}")
+    log.info(message or path)
 
     if CONFIG["output_behaviour"] == 1 or simple_output:
         if path:
             with open("/tmp/twd_path", "w") as f:
                 f.write(path)
+            if CONFIG["clear_after_screen"]:
+                with open("/tmp/twd_clear", "w") as f:
+                    f.write(path)
             if output:
                 print(path)
     elif CONFIG["output_behaviour"] == 2:
         if path:
             with open("/tmp/twd_path", "w") as f:
                 f.write(path)
+            if CONFIG["clear_after_screen"]:
+                with open("/tmp/twd_clear", "w") as f:
+                    f.write(path)
         if output:
             print(message)
 
@@ -323,6 +330,10 @@ def main():
             if [ -f /tmp/twd_path ]; then
                 cd "$(cat /tmp/twd_path)";
                 /bin/rm -f /tmp/twd_path;
+            fi;
+            if [ -f /tmp/twd_clear ]; then
+                clear;
+                /bin/rm -f /tmp/twd_clear;
             fi;
         }}""")
         return 0
