@@ -2,6 +2,18 @@
 
 All changes to this project are documented in this file starting at v1.5.3
 
+## v2.0.3 / 2024-11-04
+
+### Added
+
+- The config entry `clear_after_screen` which is an option to automatically clear the screen when exiting the TWD screen
+
+### Changed
+
+- Cleaned up logs which are now just the message or path itself
+
+---
+
 ## v2.0.2 / 2024-11-02
 
 ### Added

@@ -28,6 +28,14 @@ Possible values: 0, 1 and 2
 
 Default value: `2`
 
+- `clear_after_screen`
+
+Describes if the screen should be cleared after exiting the TWD screen
+
+Expects a boolean value i.e. `true` or `false`
+
+Default value: `false`
+
 - `log_file`
 
 Describes where to store logs created by `TWD`
