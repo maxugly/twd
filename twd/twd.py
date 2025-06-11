@@ -4,6 +4,7 @@ import json
 import time
 import re
 import logging
+import tempfile
 from importlib.metadata import version, PackageNotFoundError
 from .logger import initialize_logging
 from .screen import display_select
@@ -72,6 +73,12 @@ def ensure_log_error_files():
 ensure_log_error_files()
 
 
+def get_temp_file_path(suffix):
+    """Get a portable temporary file path."""
+    temp_dir = tempfile.gettempdir()
+    return os.path.join(temp_dir, f"twd_{suffix}")
+
+
 def get_absolute_path(path):
     try:
         return os.path.abspath(path)
@@ -97,19 +104,23 @@ def output_handler(
 
     if CONFIG["output_behaviour"] == 1 or simple_output:
         if path:
-            with open("/tmp/twd_path", "w") as f:
+            twd_path_file = get_temp_file_path("path")
+            with open(twd_path_file, "w") as f:
                 f.write(path)
             if CONFIG["clear_after_screen"]:
-                with open("/tmp/twd_clear", "w") as f:
+                twd_clear_file = get_temp_file_path("clear")
+                with open(twd_clear_file, "w") as f:
                     f.write(path)
             if output:
                 print(path)
     elif CONFIG["output_behaviour"] == 2:
         if path:
-            with open("/tmp/twd_path", "w") as f:
+            twd_path_file = get_temp_file_path("path")
+            with open(twd_path_file, "w") as f:
                 f.write(path)
             if CONFIG["clear_after_screen"]:
-                with open("/tmp/twd_clear", "w") as f:
+                twd_clear_file = get_temp_file_path("clear")
+                with open(twd_clear_file, "w") as f:
                     f.write(path)
         if output:
             print(message)
@@ -258,6 +269,7 @@ This feature is to prevent accidental execution.""",
 def setup(alias):
     bashrc_path = os.path.expanduser("~/.bashrc")
     alias = "twd" if not alias else alias
+    temp_dir = tempfile.gettempdir()
     with open(bashrc_path, "a") as file:
         file.write(f"\neval $(python3 -m twd --shell {alias})\n")
     print("Please execute the following command to activate TWD:")
@@ -325,15 +337,18 @@ def main():
     simple_output = args.simple_output
 
     if args.shell:
+        temp_dir = tempfile.gettempdir()
+        twd_path_file = os.path.join(temp_dir, "twd_path")
+        twd_clear_file = os.path.join(temp_dir, "twd_clear")
         print(rf"""function {args.shell}() {{
             python3 -m twd "$@";
-            if [ -f /tmp/twd_path ]; then
-                cd "$(cat /tmp/twd_path)";
-                /bin/rm -f /tmp/twd_path;
+            if [ -f {twd_path_file} ]; then
+                cd "$(cat {twd_path_file})";
+                /bin/rm -f {twd_path_file};
             fi;
-            if [ -f /tmp/twd_clear ]; then
+            if [ -f {twd_clear_file} ]; then
                 clear;
-                /bin/rm -f /tmp/twd_clear;
+                /bin/rm -f {twd_clear_file};
             fi;
         }}""")
         return 0
