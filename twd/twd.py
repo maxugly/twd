@@ -6,9 +6,84 @@ import re
 import logging
 import tempfile
 from importlib.metadata import version, PackageNotFoundError
-from .logger import initialize_logging
-from .screen import display_select
-from . import crud
+
+# Flexible imports - try multiple approaches
+try:
+    # Try relative imports first (when run as part of package)
+    from .logger import initialize_logging
+    from .screen import display_select
+    from . import crud
+except ImportError:
+    try:
+        # Try absolute imports (when installed as package)
+        from twd.logger import initialize_logging
+        from twd.screen import display_select
+        import twd.crud as crud
+    except ImportError:
+        try:
+            # Try local imports (when running from same directory)
+            from logger import initialize_logging
+            from screen import display_select
+            import crud
+        except ImportError:
+            # Create stub functions if modules aren't available
+            def initialize_logging(config):
+                """Stub function for when logger module is not available"""
+                pass
+            
+            def display_select(config, dirs):
+                """Stub function for when screen module is not available"""
+                # Simple fallback - just return the first directory
+                if dirs:
+                    return list(dirs.values())[0]
+                return None
+            
+            # Create a simple crud stub
+            class CrudStub:
+                def ensure_data_file_exists(self, config):
+                    """Ensure data file exists"""
+                    data_file = config.get('data_file')
+                    if not os.path.exists(data_file):
+                        os.makedirs(os.path.dirname(data_file), exist_ok=True)
+                        with open(data_file, 'w') as f:
+                            json.dump({}, f)
+                
+                def load_data(self, config):
+                    """Load data from file"""
+                    data_file = config.get('data_file')
+                    if os.path.exists(data_file):
+                        try:
+                            with open(data_file, 'r') as f:
+                                return json.load(f)
+                        except (json.JSONDecodeError, OSError):
+                            return {}
+                    return {}
+                
+                def create_entry(self, config, data, path, alias=None):
+                    """Create a new entry"""
+                    import time
+                    import uuid
+                    
+                    alias_id = alias or str(uuid.uuid4())[:8]
+                    data[alias_id] = {
+                        'path': path,
+                        'alias': alias or alias_id,
+                        'created_at': time.time()
+                    }
+                    
+                    data_file = config.get('data_file')
+                    with open(data_file, 'w') as f:
+                        json.dump(data, f, indent=2)
+                    
+                    return alias_id
+                
+                def delete_data_file(self, config):
+                    """Delete the data file"""
+                    data_file = config.get('data_file')
+                    if os.path.exists(data_file):
+                        os.remove(data_file)
+            
+            crud = CrudStub()
 
 log = logging.getLogger("log")
 error_log = logging.getLogger("error")
