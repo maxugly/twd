@@ -13,14 +13,79 @@ filtered_DIRS = None
 search_query = ""
 original_DIRS = None
 
+# Color pair constants
+COLOR_DEFAULT = 1
+COLOR_BORDER = 2
+COLOR_HEADER = 3
+COLOR_SELECTED = 4
+COLOR_CONTROLS = 5
+COLOR_ACTION = 6
+COLOR_WARNING = 7
+COLOR_ALIAS = 8
+COLOR_ID = 9
+COLOR_PATH_TEXT = 10
+COLOR_PATH_SLASH = 11
+COLOR_CREATED_AT = 12
+
+def init_colors():
+    """Initialize color pairs for the TUI with a candy theme."""
+    curses.start_color()
+    curses.use_default_colors()  # Use terminal's default background (black in dark mode)
+
+    if curses.has_colors() and curses.COLORS >= 256:
+        # 256-color palette for vibrant candy theme
+        curses.init_pair(COLOR_DEFAULT, 252, -1)  # Light gray text
+        curses.init_pair(COLOR_BORDER, 46, -1)    # Bright green for borders
+        curses.init_pair(COLOR_HEADER, 255, -1)   # Bright white for headers
+        curses.init_pair(COLOR_SELECTED, 252, 24) # Light gray on dark blue (unused but kept)
+        curses.init_pair(COLOR_CONTROLS, 226, -1) # Bright yellow for controls
+        curses.init_pair(COLOR_ACTION, 200, -1)   # Bright magenta for action area
+        curses.init_pair(COLOR_WARNING, 196, -1)  # Bright red for warnings
+        curses.init_pair(COLOR_ALIAS, 196, -1)    # Bright red for alias
+        curses.init_pair(COLOR_ID, 21, -1)        # Bright blue for id
+        curses.init_pair(COLOR_PATH_TEXT, 46, -1) # Bright green for path text
+        curses.init_pair(COLOR_PATH_SLASH, 226, -1) # Bright yellow for slashes
+        curses.init_pair(COLOR_CREATED_AT, 201, -1) # Bright magenta for created date
+    else:
+        # 16-color palette with bold for brightness
+        curses.init_pair(COLOR_DEFAULT, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_BORDER, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_HEADER, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_SELECTED, curses.COLOR_WHITE, curses.COLOR_BLUE)
+        curses.init_pair(COLOR_CONTROLS, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_ACTION, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_WARNING, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_ALIAS, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_ID, curses.COLOR_BLUE, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_PATH_TEXT, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_PATH_SLASH, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_CREATED_AT, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
 
 def draw_hr(stdscr, y, mode=None):
+    """Draw a horizontal rule with bold attribute."""
     _, max_cols = stdscr.getmaxyx()
-    mode = mode if mode is not None else curses.A_NORMAL
+    mode = mode if mode is not None else curses.color_pair(COLOR_BORDER) | curses.A_BOLD
     stdscr.addstr(y, 1, "─" * (max_cols - 2), mode)
 
+def draw_path(stdscr, y, x, path, max_len, text_color, slash_color, selected=False):
+    """Draw the path with different colors for text and slashes."""
+    attr = curses.A_REVERSE if selected else 0
+    pos = x
+    for char in path:
+        if pos - x >= max_len:
+            break
+        if char == '/':
+            stdscr.addch(y, pos, char, curses.color_pair(slash_color) | attr | curses.A_BOLD)
+        else:
+            stdscr.addch(y, pos, char, curses.color_pair(text_color) | attr | curses.A_BOLD)
+        pos += 1
+    # Pad with spaces if necessary
+    while pos - x < max_len:
+        stdscr.addch(y, pos, ' ', curses.color_pair(text_color) | attr | curses.A_BOLD)
+        pos += 1
 
 def filter_dirs_by_search(query):
+    """Filter directories based on search query."""
     global filtered_DIRS
     filtered_DIRS = (
         {k: v for k, v in DIRS.items() if query.lower() in v["alias"].lower()}
@@ -28,47 +93,43 @@ def filter_dirs_by_search(query):
         else DIRS
     )
 
-
 def display_select_screen(stdscr):
+    """Display the selection screen with a candy-themed TUI."""
     global search_query, filtered_DIRS, original_DIRS
+    init_colors()
     selected_entry = 0
     pre_selected_path = None
     confirm_mode = False
     action = None
     search_mode = False
     post_search_mode = False
-
     running = True
 
     while running:
         max_items = len(filtered_DIRS)
         stdscr.clear()
 
-        # Border setup
+        # Border setup with bold bright colors
         height, width = stdscr.getmaxyx()
-        stdscr.addstr(0, 0, "╭")
-        stdscr.addstr(0, 1, "─" * (width - 2))
-        stdscr.addstr(0, width - 1, "╮")
-        stdscr.addstr(height - 1, 0, "╰")
-        stdscr.addstr(height - 1, 1, "─" * (width - 2))
-        stdscr.addstr(height - 2, width - 1, "╯")
+        stdscr.addstr(0, 0, "╭", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        stdscr.addstr(0, 1, "─" * (width - 2), curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        stdscr.addstr(0, width - 1, "╮", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        stdscr.addstr(height - 1, 0, "╰", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        stdscr.addstr(height - 1, 1, "─" * (width - 2), curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        stdscr.addstr(height - 2, width - 1, "╯", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
         for i in range(1, height - 1):
-            stdscr.addstr(i, 0, "│")
-            stdscr.addstr(i, width - 1, "│")
+            stdscr.addstr(i, 0, "│", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            stdscr.addstr(i, width - 1, "│", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
 
         inner_height = height - 2
         inner_width = width - 2
-        stdscr.addstr(1, 1, f"Current directory: {os.getcwd()}")
+        stdscr.addstr(1, 1, f"Current directory: {os.getcwd()}", curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
 
         draw_hr(stdscr, 2)
 
         # Header
-        max_alias_len = max(
-            max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5
-        )
-        max_path_len = max(
-            max(len(entry["path"]) for entry in filtered_DIRS.values()), 4
-        )
+        max_alias_len = max(max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5)
+        max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
         max_id_len = max(max(len(alias_id) for alias_id in filtered_DIRS.keys()), 2)
 
         alias_col = max_alias_len + 2
@@ -76,34 +137,50 @@ def display_select_screen(stdscr):
         path_col = max_path_len
 
         header_text = f"{'ALIAS'.ljust(alias_col)}{'ID'.ljust(id_col)}{'PATH'.ljust(path_col)}  CREATED AT"
-        stdscr.addstr(3, 1, header_text[:inner_width])
+        stdscr.addstr(3, 1, header_text[:inner_width], curses.color_pair(COLOR_HEADER) | curses.A_BOLD)
 
         draw_hr(stdscr, 4)
 
-        # List entries
+        # List entries with candy-themed colors
         line_start = 5
         for entry_id, entry in enumerate(filtered_DIRS.values()):
             if line_start >= inner_height - 5:
                 break
             alias = entry["alias"].ljust(max_alias_len)
-            path = entry["path"].ljust(max_path_len)
             alias_id = list(filtered_DIRS.keys())[entry_id].ljust(max_id_len)
-            created_at = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(entry["created_at"])
-            )
+            created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry["created_at"]))
 
-            line_text = f"{alias}  {alias_id}  {path}  {created_at}"
+            current_x = 1
+            attr = curses.A_REVERSE if entry_id == selected_entry else 0
+
+            # Alias
+            stdscr.addstr(line_start, current_x, alias, curses.color_pair(COLOR_ALIAS) | attr | curses.A_BOLD)
+            current_x += max_alias_len
+            stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+            current_x += 2
+
+            # ID
+            stdscr.addstr(line_start, current_x, alias_id, curses.color_pair(COLOR_ID) | attr | curses.A_BOLD)
+            current_x += max_id_len
+            stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+            current_x += 2
+
+            # Path
+            draw_path(stdscr, line_start, current_x, entry["path"], max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
+            current_x += max_path_len
+            stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+            current_x += 2
+
+            # Created At
+            stdscr.addstr(line_start, current_x, created_at, curses.color_pair(COLOR_CREATED_AT) | attr | curses.A_BOLD)
+
             if entry_id == selected_entry:
-                stdscr.addstr(line_start, 1, line_text[:inner_width], curses.A_REVERSE)
                 pre_selected_path = entry["path"]
-            else:
-                stdscr.addstr(line_start, 1, line_text[:inner_width])
-
             line_start += 1
 
-        # Controls
+        # Controls with bright colors
         controls_y = height - 5
-        draw_hr(stdscr, controls_y, curses.A_DIM)
+        draw_hr(stdscr, controls_y)
         controls_text = (
             "ctrls: enter=select"
             if search_mode
@@ -111,33 +188,34 @@ def display_select_screen(stdscr):
             if post_search_mode
             else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=quit  s=search"
         )
-        stdscr.addstr(controls_y + 1, 1, controls_text, curses.A_DIM)
+        stdscr.addstr(controls_y + 1, 1, controls_text, curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
 
         # Action area
         action_area_y = height - 3
         draw_hr(stdscr, action_area_y)
 
         if search_mode:
-            stdscr.addstr(action_area_y + 1, 1, f"Search: {search_query}")
+            stdscr.addstr(action_area_y + 1, 1, f"Search: {search_query}", curses.color_pair(COLOR_ACTION) | curses.A_BOLD)
         elif confirm_mode and action == "delete":
             entry = filtered_DIRS[list(filtered_DIRS.keys())[selected_entry]]
             stdscr.addstr(
                 action_area_y + 1,
                 1,
                 f"Delete entry '{entry['alias']}' ({entry['path']})? [enter/q]",
+                curses.color_pair(COLOR_WARNING) | curses.A_BOLD,
             )
         elif pre_selected_path:
             stdscr.addstr(
                 action_area_y + 1,
                 1,
                 f"Command: cd {os.path.abspath(os.path.expanduser(pre_selected_path))}",
+                curses.color_pair(COLOR_ACTION) | curses.A_BOLD,
             )
 
         stdscr.refresh()
 
-        # Handle key events
+        # Handle key events (unchanged)
         key = stdscr.getch()
-
         if search_mode:
             if key == ord("\n"):
                 search_mode = False
@@ -146,10 +224,13 @@ def display_select_screen(stdscr):
                 search_query = search_query[:-1]
                 filter_dirs_by_search(search_query)
             else:
-                search_query += chr(key)
-                filter_dirs_by_search(search_query)
+                try:
+                    search_query += chr(key)
+                    filter_dirs_by_search(search_query)
+                except ValueError:
+                    pass
         elif post_search_mode:
-            if key == ord("q") or key == 27:  # 'q' or 'esc'
+            if key == ord("q") or key == 27:
                 filtered_DIRS = original_DIRS
                 post_search_mode = False
             elif key == curses.KEY_UP or key == ord("k"):
@@ -190,8 +271,8 @@ def display_select_screen(stdscr):
                 search_mode = True
                 selected_entry = 0
 
-
 def display_select(config, dirs):
+    """Wrapper to run the TUI."""
     global CONFIG, DIRS, filtered_DIRS, search_query, original_DIRS
     CONFIG = config
     DIRS = dirs
