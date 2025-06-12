@@ -105,6 +105,10 @@ def display_select_screen(stdscr):
     post_search_mode = False
     running = True
 
+    # State variables for column visibility
+    show_id_column = True
+    show_created_column = True
+
     while running:
         max_items = len(filtered_DIRS)
         stdscr.clear()
@@ -127,56 +131,91 @@ def display_select_screen(stdscr):
 
         draw_hr(stdscr, 2)
 
+        # Handle empty filtered_DIRS before calculating max lengths
+        if not filtered_DIRS:
+            max_alias_len = 5 # Default minimum length
+            max_path_len = 4  # Default minimum length
+            max_id_len = 2    # Default minimum length
+            # Display a message when no results are found
+            no_results_msg = "No matching directories found."
+            stdscr.addstr(5, 1, no_results_msg, curses.color_pair(COLOR_WARNING) | curses.A_BOLD)
+            # Ensure selected_entry is reset to prevent index errors
+            selected_entry = -1 # Indicate nothing is selected
+        else:
+            max_alias_len = max(max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5)
+            max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
+            max_id_len = max(max(len(alias_id) for alias_id in filtered_DIRS.keys()), 2)
+            # Ensure selected_entry is within bounds if items were removed
+            selected_entry = selected_entry % max_items if max_items > 0 else 0
+            if selected_entry == -1 and max_items > 0:
+                selected_entry = 0
+
+
         # Header
-        max_alias_len = max(max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5)
-        max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
-        max_id_len = max(max(len(alias_id) for alias_id in filtered_DIRS.keys()), 2)
+        header_parts = []
+        current_header_len = 0
 
-        alias_col = max_alias_len + 2
-        id_col = max_id_len + 2
-        path_col = max_path_len
+        header_parts.append(f"{'ALIAS'.ljust(max_alias_len)}")
+        current_header_len += max_alias_len + 2 # +2 for padding
 
-        header_text = f"{'ALIAS'.ljust(alias_col)}{'ID'.ljust(id_col)}{'PATH'.ljust(path_col)}  CREATED AT"
+        if show_id_column:
+            header_parts.append(f"{'ID'.ljust(max_id_len)}")
+            current_header_len += max_id_len + 2 # +2 for padding
+
+        header_parts.append(f"{'PATH'.ljust(max_path_len)}")
+        current_header_len += max_path_len + 2 # +2 for padding
+
+        if show_created_column:
+            header_parts.append("CREATED AT")
+            # We don't add its length to current_header_len as it's the last element
+
+        header_text = "  ".join(header_parts) # Join with 2 spaces padding
         stdscr.addstr(3, 1, header_text[:inner_width], curses.color_pair(COLOR_HEADER) | curses.A_BOLD)
 
         draw_hr(stdscr, 4)
 
         # List entries with candy-themed colors
         line_start = 5
-        for entry_id, entry in enumerate(filtered_DIRS.values()):
-            if line_start >= inner_height - 5:
-                break
-            alias = entry["alias"].ljust(max_alias_len)
-            alias_id = list(filtered_DIRS.keys())[entry_id].ljust(max_id_len)
-            created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry["created_at"]))
+        if filtered_DIRS: # Only draw entries if there are any
+            for entry_id, entry in enumerate(filtered_DIRS.values()):
+                if line_start >= inner_height - 5:
+                    break
+                alias = entry["alias"].ljust(max_alias_len)
+                alias_id = list(filtered_DIRS.keys())[entry_id].ljust(max_id_len)
+                created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry["created_at"]))
 
-            current_x = 1
-            attr = curses.A_REVERSE if entry_id == selected_entry else 0
+                current_x = 1
+                attr = curses.A_REVERSE if entry_id == selected_entry else 0
 
-            # Alias
-            stdscr.addstr(line_start, current_x, alias, curses.color_pair(COLOR_ALIAS) | attr | curses.A_BOLD)
-            current_x += max_alias_len
-            stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
-            current_x += 2
+                # Alias
+                stdscr.addstr(line_start, current_x, alias, curses.color_pair(COLOR_ALIAS) | attr | curses.A_BOLD)
+                current_x += max_alias_len
+                stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                current_x += 2
 
-            # ID
-            stdscr.addstr(line_start, current_x, alias_id, curses.color_pair(COLOR_ID) | attr | curses.A_BOLD)
-            current_x += max_id_len
-            stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
-            current_x += 2
+                # ID (conditionally displayed)
+                if show_id_column:
+                    stdscr.addstr(line_start, current_x, alias_id, curses.color_pair(COLOR_ID) | attr | curses.A_BOLD)
+                    current_x += max_id_len
+                    stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                    current_x += 2
 
-            # Path
-            draw_path(stdscr, line_start, current_x, entry["path"], max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
-            current_x += max_path_len
-            stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
-            current_x += 2
+                # Path
+                draw_path(stdscr, line_start, current_x, entry["path"], max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
+                current_x += max_path_len
+                stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                current_x += 2
 
-            # Created At
-            stdscr.addstr(line_start, current_x, created_at, curses.color_pair(COLOR_CREATED_AT) | attr | curses.A_BOLD)
+                # Created At (conditionally displayed)
+                if show_created_column:
+                    stdscr.addstr(line_start, current_x, created_at, curses.color_pair(COLOR_CREATED_AT) | attr | curses.A_BOLD)
 
-            if entry_id == selected_entry:
-                pre_selected_path = entry["path"]
-            line_start += 1
+                if entry_id == selected_entry:
+                    pre_selected_path = entry["path"]
+                line_start += 1
+        else:
+            pre_selected_path = None # No path to pre-select if list is empty
+
 
         # Controls with bright colors
         controls_y = height - 5
@@ -184,9 +223,9 @@ def display_select_screen(stdscr):
         controls_text = (
             "ctrls: enter=select"
             if search_mode
-            else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=exit search  s=search"
+            else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=exit search  s=search  n=toggle id  t=toggle created"
             if post_search_mode
-            else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=quit  s=search"
+            else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=quit  s=search  n=toggle id  t=toggle created"
         )
         stdscr.addstr(controls_y + 1, 1, controls_text, curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
 
@@ -211,11 +250,24 @@ def display_select_screen(stdscr):
                 f"Command: cd {os.path.abspath(os.path.expanduser(pre_selected_path))}",
                 curses.color_pair(COLOR_ACTION) | curses.A_BOLD,
             )
+        else: # Display help/info when no results and not in other modes
+             if not filtered_DIRS and not search_mode and not confirm_mode:
+                 stdscr.addstr(action_area_y + 1, 1, "Type 's' to search or add new entries.", curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
+
 
         stdscr.refresh()
 
-        # Handle key events (unchanged)
+        # Handle key events
         key = stdscr.getch()
+
+        # Before handling specific modes, adjust selected_entry for navigation if list is empty
+        if not filtered_DIRS:
+            if key == curses.KEY_UP or key == ord("k") or key == curses.KEY_DOWN or key == ord("j"):
+                # Ignore navigation keys if there's nothing to navigate
+                continue # Skip to next loop iteration
+            if key == ord("\n"): # Cannot select if no items
+                continue
+
         if search_mode:
             if key == ord("\n"):
                 search_mode = False
@@ -225,51 +277,72 @@ def display_select_screen(stdscr):
                 filter_dirs_by_search(search_query)
             else:
                 try:
-                    search_query += chr(key)
-                    filter_dirs_by_search(search_query)
+                    # Prevent adding non-printable characters to search query
+                    if 32 <= key <= 126: # ASCII printable characters
+                        search_query += chr(key)
+                        filter_dirs_by_search(search_query)
                 except ValueError:
                     pass
         elif post_search_mode:
-            if key == ord("q") or key == 27:
+            if key == ord("q") or key == 27: # 27 is ESC key
                 filtered_DIRS = original_DIRS
                 post_search_mode = False
+                search_query = "" # Clear search query on exit
+                selected_entry = 0 # Reset selection
             elif key == curses.KEY_UP or key == ord("k"):
                 selected_entry = max(0, selected_entry - 1)
             elif key == curses.KEY_DOWN or key == ord("j"):
                 selected_entry = min(max_items - 1, selected_entry + 1)
             elif key == ord("\n"):
-                selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
-                return filtered_DIRS[selected_entry_id]
+                if max_items > 0: # Only return if there's something to select
+                    selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
+                    return filtered_DIRS[selected_entry_id]
+            elif key == ord("n"):
+                show_id_column = not show_id_column
+            elif key == ord("t"):
+                show_created_column = not show_created_column
         elif confirm_mode:
             if key == ord("\n") and action == "delete":
-                selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
-                data = crud.load_data(CONFIG)
-                try:
-                    crud.delete_entry(CONFIG, data, selected_entry_id)
-                except KeyError:
-                    error_log.error(f"Entry ID {selected_entry_id} not found")
-                del filtered_DIRS[selected_entry_id]
-                if selected_entry >= len(filtered_DIRS):
-                    selected_entry = max(len(filtered_DIRS) - 1, 0)
+                if max_items > 0: # Ensure there's an item to delete
+                    selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
+                    data = crud.load_data(CONFIG)
+                    try:
+                        crud.delete_entry(CONFIG, data, selected_entry_id)
+                        del filtered_DIRS[selected_entry_id]
+                        # Adjust selected_entry after deletion
+                        if selected_entry >= len(filtered_DIRS) and len(filtered_DIRS) > 0:
+                            selected_entry = len(filtered_DIRS) - 1
+                        elif len(filtered_DIRS) == 0:
+                            selected_entry = -1 # No items left
+                    except KeyError:
+                        error_log.error(f"Entry ID {selected_entry_id} not found during deletion attempt")
                 confirm_mode = False
             else:
                 confirm_mode = False
-        else:
+        else: # Normal navigation mode
             if key == curses.KEY_UP or key == ord("k"):
-                selected_entry = (selected_entry - 1) % max_items
+                selected_entry = (selected_entry - 1) % max_items if max_items > 0 else -1
             elif key == curses.KEY_DOWN or key == ord("j"):
-                selected_entry = (selected_entry + 1) % max_items
+                selected_entry = (selected_entry + 1) % max_items if max_items > 0 else -1
             elif key == ord("\n"):
-                selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
-                return filtered_DIRS[selected_entry_id]
+                if max_items > 0:
+                    selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
+                    return filtered_DIRS[selected_entry_id]
             elif key == ord("q"):
                 return None
             elif key == ord("d") or key == curses.KEY_BACKSPACE:
-                confirm_mode = True
-                action = "delete"
+                if max_items > 0: # Only allow delete if there are items
+                    confirm_mode = True
+                    action = "delete"
             elif key == ord("s"):
                 search_mode = True
-                selected_entry = 0
+                selected_entry = 0 # Reset selection on entering search
+                search_query = "" # Clear previous search query
+                filter_dirs_by_search(search_query) # Reset filtered_DIRS to all
+            elif key == ord("n"):
+                show_id_column = not show_id_column
+            elif key == ord("t"):
+                show_created_column = not show_created_column
 
 def display_select(config, dirs):
     """Wrapper to run the TUI."""
@@ -280,3 +353,4 @@ def display_select(config, dirs):
     original_DIRS = DIRS
     search_query = ""
     return curses.wrapper(display_select_screen)
+    
