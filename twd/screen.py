@@ -26,6 +26,7 @@ COLOR_ID = 9
 COLOR_PATH_TEXT = 10
 COLOR_PATH_SLASH = 11
 COLOR_CREATED_AT = 12
+COLOR_SIZE_READOUT = 13  # Bright orange for size readout
 
 def init_colors():
     """Initialize color pairs for the TUI with a candy theme."""
@@ -46,6 +47,7 @@ def init_colors():
         curses.init_pair(COLOR_PATH_TEXT, 46, -1) # Bright green for path text
         curses.init_pair(COLOR_PATH_SLASH, 226, -1) # Bright yellow for slashes
         curses.init_pair(COLOR_CREATED_AT, 201, -1) # Bright magenta for created date
+        curses.init_pair(COLOR_SIZE_READOUT, 208, -1) # Bright orange for size readout
     else:
         # 16-color palette with bold for brightness
         curses.init_pair(COLOR_DEFAULT, curses.COLOR_WHITE, curses.COLOR_BLACK)
@@ -60,28 +62,41 @@ def init_colors():
         curses.init_pair(COLOR_PATH_TEXT, curses.COLOR_GREEN, curses.COLOR_BLACK)
         curses.init_pair(COLOR_PATH_SLASH, curses.COLOR_YELLOW, curses.COLOR_BLACK)
         curses.init_pair(COLOR_CREATED_AT, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+        curses.init_pair(COLOR_SIZE_READOUT, curses.COLOR_YELLOW, curses.COLOR_BLACK) # Fallback to yellow
 
 def draw_hr(stdscr, y, mode=None):
     """Draw a horizontal rule with bold attribute."""
     _, max_cols = stdscr.getmaxyx()
     mode = mode if mode is not None else curses.color_pair(COLOR_BORDER) | curses.A_BOLD
-    stdscr.addstr(y, 1, "─" * (max_cols - 2), mode)
+    try:
+        stdscr.addstr(y, 1, "─" * (max_cols - 2), mode)
+    except curses.error:
+        pass  # Ignore errors if the line is too long
 
 def draw_path(stdscr, y, x, path, max_len, text_color, slash_color, selected=False):
     """Draw the path with different colors for text and slashes."""
+    _, max_cols = stdscr.getmaxyx()
     attr = curses.A_REVERSE if selected else 0
     pos = x
+    # Limit max_len to fit within terminal width
+    max_len = min(max_len, max_cols - x - 1)
     for char in path:
-        if pos - x >= max_len:
+        if pos - x >= max_len or pos >= max_cols - 1:
             break
-        if char == '/':
-            stdscr.addch(y, pos, char, curses.color_pair(slash_color) | attr | curses.A_BOLD)
-        else:
-            stdscr.addch(y, pos, char, curses.color_pair(text_color) | attr | curses.A_BOLD)
+        try:
+            if char == '/':
+                stdscr.addch(y, pos, char, curses.color_pair(slash_color) | attr | curses.A_BOLD)
+            else:
+                stdscr.addch(y, pos, char, curses.color_pair(text_color) | attr | curses.A_BOLD)
+        except curses.error:
+            break  # Stop if we hit a boundary
         pos += 1
     # Pad with spaces if necessary
-    while pos - x < max_len:
-        stdscr.addch(y, pos, ' ', curses.color_pair(text_color) | attr | curses.A_BOLD)
+    while pos - x < max_len and pos < max_cols - 1:
+        try:
+            stdscr.addch(y, pos, ' ', curses.color_pair(text_color) | attr | curses.A_BOLD)
+        except curses.error:
+            break
         pos += 1
 
 def filter_dirs_by_search(query):
@@ -99,6 +114,9 @@ def display_select_screen(stdscr, save_config_func=None):
     init_colors()
     # Enable mouse events
     curses.mousemask(curses.BUTTON1_PRESSED)  # Detect left-click
+    # Enable resize detection
+    curses.resizeterm(*stdscr.getmaxyx())
+    stdscr.keypad(True)  # Enable keypad for special keys like KEY_RESIZE
     selected_entry = 0
     pre_selected_path = None
     confirm_mode = False
@@ -106,6 +124,7 @@ def display_select_screen(stdscr, save_config_func=None):
     search_mode = False
     post_search_mode = False
     running = True
+    last_resize_time = 0  # Track last resize time for debouncing
 
     # State variables for column visibility, initialized from CONFIG
     show_id_column = CONFIG.get("show_id_column", True)
@@ -117,19 +136,32 @@ def display_select_screen(stdscr, save_config_func=None):
 
         # Border setup with bold bright colors
         height, width = stdscr.getmaxyx()
-        stdscr.addstr(0, 0, "╭", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-        stdscr.addstr(0, 1, "─" * (width - 2), curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-        stdscr.addstr(0, width - 1, "╮", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-        stdscr.addstr(height - 1, 0, "╰", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-        stdscr.addstr(height - 1, 1, "─" * (width - 2), curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-        stdscr.addstr(height - 2, width - 1, "╯", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-        for i in range(1, height - 1):
-            stdscr.addstr(i, 0, "│", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
-            stdscr.addstr(i, width - 1, "│", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        try:
+            stdscr.addstr(0, 0, "╭", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            stdscr.addstr(0, 1, "─" * (width - 2), curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            stdscr.addstr(0, width - 1, "╮", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            stdscr.addstr(height - 1, 0, "╰", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            stdscr.addstr(height - 1, 1, "─" * (width - 2), curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            stdscr.addstr(height - 2, width - 1, "╯", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+            for i in range(1, height - 1):
+                stdscr.addstr(i, 0, "│", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+                stdscr.addstr(i, width - 1, "│", curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
+        except curses.error:
+            pass  # Ignore boundary errors
 
         inner_height = height - 2
         inner_width = width - 2
-        stdscr.addstr(1, 1, f"Current directory: {os.getcwd()}", curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
+
+        # Display current directory and size readout on the same line
+        dir_text = f"Current directory: {os.getcwd()}"
+        size_text = f"{width}x{height}"
+        size_x = width - len(size_text) - 1
+        dir_max_len = size_x - 2  # Reserve space for size text and buffer
+        try:
+            stdscr.addstr(1, 1, dir_text[:dir_max_len], curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
+            stdscr.addstr(1, size_x, size_text, curses.color_pair(COLOR_SIZE_READOUT) | curses.A_BOLD)
+        except curses.error:
+            pass
 
         draw_hr(stdscr, 2)
 
@@ -140,13 +172,18 @@ def display_select_screen(stdscr, save_config_func=None):
             max_id_len = 2    # Default minimum length
             # Display a message when no results are found
             no_results_msg = "No matching directories found."
-            stdscr.addstr(5, 1, no_results_msg, curses.color_pair(COLOR_WARNING) | curses.A_BOLD)
+            try:
+                stdscr.addstr(5, 1, no_results_msg[:inner_width - 1], curses.color_pair(COLOR_WARNING) | curses.A_BOLD)
+            except curses.error:
+                pass
             # Ensure selected_entry is reset to prevent index errors
             selected_entry = -1  # Indicate nothing is selected
         else:
             max_alias_len = max(max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5)
-            max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
             max_id_len = max(max(len(alias_id) for alias_id in filtered_DIRS.keys()), 2)
+            # Limit max_path_len to fit within terminal width
+            max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
+            max_path_len = min(max_path_len, inner_width - max_alias_len - max_id_len - 10)  # Adjust for other columns and padding
             # Ensure selected_entry is within bounds if items were removed
             selected_entry = selected_entry % max_items if max_items > 0 else 0
             if selected_entry == -1 and max_items > 0:
@@ -168,10 +205,12 @@ def display_select_screen(stdscr, save_config_func=None):
 
         if show_created_column:
             header_parts.append("CREATED AT")
-            # We don't add its length to current_header_len as it's the last element
 
         header_text = "  ".join(header_parts)  # Join with 2 spaces padding
-        stdscr.addstr(3, 1, header_text[:inner_width], curses.color_pair(COLOR_HEADER) | curses.A_BOLD)
+        try:
+            stdscr.addstr(3, 1, header_text[:inner_width - 1], curses.color_pair(COLOR_HEADER) | curses.A_BOLD)
+        except curses.error:
+            pass
 
         draw_hr(stdscr, 4)
 
@@ -180,7 +219,7 @@ def display_select_screen(stdscr, save_config_func=None):
         entry_rows = {}  # Map row numbers to entry indices for mouse clicks
         if filtered_DIRS:  # Only draw entries if there are any
             for entry_id, entry in enumerate(filtered_DIRS.values()):
-                if line_start >= inner_height - 5:
+                if line_start >= inner_height - 6:  # Adjusted for two-line controls
                     break
                 alias = entry["alias"].ljust(max_alias_len)
                 alias_id = list(filtered_DIRS.keys())[entry_id].ljust(max_id_len)
@@ -190,27 +229,48 @@ def display_select_screen(stdscr, save_config_func=None):
                 attr = curses.A_REVERSE if entry_id == selected_entry else 0
 
                 # Alias
-                stdscr.addstr(line_start, current_x, alias, curses.color_pair(COLOR_ALIAS) | attr | curses.A_BOLD)
+                try:
+                    stdscr.addstr(line_start, current_x, alias[:inner_width - current_x], curses.color_pair(COLOR_ALIAS) | attr | curses.A_BOLD)
+                except curses.error:
+                    pass
                 current_x += max_alias_len
-                stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                try:
+                    stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                except curses.error:
+                    pass
                 current_x += 2
 
                 # ID (conditionally displayed)
                 if show_id_column:
-                    stdscr.addstr(line_start, current_x, alias_id, curses.color_pair(COLOR_ID) | attr | curses.A_BOLD)
+                    try:
+                        stdscr.addstr(line_start, current_x, alias_id[:inner_width - current_x], curses.color_pair(COLOR_ID) | attr | curses.A_BOLD)
+                    except curses.error:
+                        pass
                     current_x += max_id_len
-                    stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                    try:
+                        stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                    except curses.error:
+                        pass
                     current_x += 2
 
                 # Path
-                draw_path(stdscr, line_start, current_x, entry["path"], max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
+                try:
+                    draw_path(stdscr, line_start, current_x, entry["path"], max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
+                except curses.error:
+                    pass
                 current_x += max_path_len
-                stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                try:
+                    stdscr.addstr(line_start, current_x, "  ", curses.color_pair(COLOR_DEFAULT) | attr)
+                except curses.error:
+                    pass
                 current_x += 2
 
                 # Created At (conditionally displayed)
                 if show_created_column:
-                    stdscr.addstr(line_start, current_x, created_at, curses.color_pair(COLOR_CREATED_AT) | attr | curses.A_BOLD)
+                    try:
+                        stdscr.addstr(line_start, current_x, created_at[:inner_width - current_x], curses.color_pair(COLOR_CREATED_AT) | attr | curses.A_BOLD)
+                    except curses.error:
+                        pass
 
                 if entry_id == selected_entry:
                     pre_selected_path = entry["path"]
@@ -220,44 +280,70 @@ def display_select_screen(stdscr, save_config_func=None):
         else:
             pre_selected_path = None  # No path to pre-select if list is empty
 
-        # Controls with bright colors
-        controls_y = height - 5
+        # Controls with bright colors, split into two lines
+        controls_y = height - 6  # Adjusted for two lines
         draw_hr(stdscr, controls_y)
-        controls_text = (
-            "ctrls: enter=select"
-            if search_mode
-            else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete  q=exit search  s=search  n=toggle id  t=toggle created"
-            if post_search_mode
-            else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete  q=quit  s=search  n=toggle id  t=toggle created"
-        )
-        stdscr.addstr(controls_y + 1, 1, controls_text, curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
+        if search_mode:
+            controls_text = "ctrls: enter=select"
+            try:
+                stdscr.addstr(controls_y + 1, 1, controls_text[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
+            except curses.error:
+                pass
+            toggle_key_positions = {}  # No toggle keys in search mode
+        else:
+            controls_text = (
+                "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete\n"
+                "q=quit  s=search  n=toggle id  t=toggle created"
+                if not post_search_mode
+                else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete\n"
+                     "q=exit search  s=search  n=toggle id  t=toggle created"
+            )
+            # Split controls text into lines and render each
+            controls_lines = controls_text.split("\n")
+            toggle_key_positions = {}  # Map key to (y, x) for clickable toggles
+            for i, line in enumerate(controls_lines):
+                try:
+                    stdscr.addstr(controls_y + 1 + i, 1, line[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
+                except curses.error:
+                    pass
+                # Track positions of 'n' and 't' for clickable toggles
+                for key in ['n', 't']:
+                    if key in line:
+                        x_pos = line.index(key) + 1  # +1 for x=1 starting position
+                        toggle_key_positions[key] = (controls_y + 1 + i, x_pos)
 
         # Action area
         action_area_y = height - 3
         draw_hr(stdscr, action_area_y)
 
         if search_mode:
-            stdscr.addstr(action_area_y + 1, 1, f"Search: {search_query}", curses.color_pair(COLOR_ACTION) | curses.A_BOLD)
+            try:
+                stdscr.addstr(action_area_y + 1, 1, f"Search: {search_query}"[:inner_width - 1], curses.color_pair(COLOR_ACTION) | curses.A_BOLD)
+            except curses.error:
+                pass
         elif confirm_mode and action == "delete":
             entry = filtered_DIRS[list(filtered_DIRS.keys())[selected_entry]]
-            stdscr.addstr(
-                action_area_y + 1,
-                1,
-                f"Delete entry '{entry['alias']}' ({entry['path']})? [enter/q]",
-                curses.color_pair(COLOR_WARNING) | curses.A_BOLD,
-            )
+            delete_msg = f"Delete entry '{entry['alias']}' ({entry['path']})? [enter/q]"
+            try:
+                stdscr.addstr(action_area_y + 1, 1, delete_msg[:inner_width - 1], curses.color_pair(COLOR_WARNING) | curses.A_BOLD)
+            except curses.error:
+                pass
         elif pre_selected_path:
-            stdscr.addstr(
-                action_area_y + 1,
-                1,
-                f"Command: cd {os.path.abspath(os.path.expanduser(pre_selected_path))}",
-                curses.color_pair(COLOR_ACTION) | curses.A_BOLD,
-            )
+            try:
+                stdscr.addstr(action_area_y + 1, 1, f"Command: cd {os.path.abspath(os.path.expanduser(pre_selected_path))}"[:inner_width - 1], curses.color_pair(COLOR_ACTION) | curses.A_BOLD)
+            except curses.error:
+                pass
         else:  # Display help/info when no results and not in other modes
             if not filtered_DIRS and not search_mode and not confirm_mode:
-                stdscr.addstr(action_area_y + 1, 1, "Type 's' to search or add new entries.", curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
+                try:
+                    stdscr.addstr(action_area_y + 1, 1, "Type 's' to search or add new entries."[:inner_width - 1], curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
+                except curses.error:
+                    pass
 
-        stdscr.refresh()
+        try:
+            stdscr.refresh()
+        except curses.error:
+            pass
 
         # Handle key and mouse events
         try:
@@ -265,11 +351,42 @@ def display_select_screen(stdscr, save_config_func=None):
         except curses.error:
             continue  # Handle interrupted getch (e.g., during resize)
 
+        # Handle resize events with debouncing
+        if key == curses.KEY_RESIZE:
+            current_time = time.time()
+            if current_time - last_resize_time >= 0.1:  # Debounce: 0.1s minimum interval
+                last_resize_time = current_time
+                try:
+                    curses.resizeterm(*stdscr.getmaxyx())
+                    stdscr.clear()
+                    stdscr.refresh()
+                    error_log.debug(f"Resized to {width}x{height}")
+                except curses.error:
+                    pass
+            continue  # Skip to next loop to allow other events
+
         # Handle mouse events
         if key == curses.KEY_MOUSE:
             try:
                 _, x, y, _, state = curses.getmouse()
                 if state & curses.BUTTON1_PRESSED:  # Left-click
+                    # Check for clicks on toggle keys
+                    for toggle_key, (key_y, key_x) in toggle_key_positions.items():
+                        if y == key_y and x == key_x and not search_mode and not confirm_mode:
+                            if toggle_key == 'n':
+                                show_id_column = not show_id_column
+                                if save_config_func:
+                                    updated_config = CONFIG.copy()
+                                    updated_config["show_id_column"] = show_id_column
+                                    save_config_func(updated_config)
+                            elif toggle_key == 't':
+                                show_created_column = not show_created_column
+                                if save_config_func:
+                                    updated_config = CONFIG.copy()
+                                    updated_config["show_created_column"] = show_created_column
+                                    save_config_func(updated_config)
+                            break
+                    # Check for clicks on directory entries
                     if y in entry_rows and max_items > 0 and not search_mode and not confirm_mode:
                         # Update selected entry to highlight it
                         selected_entry = entry_rows[y]
