@@ -93,7 +93,7 @@ def filter_dirs_by_search(query):
         else DIRS
     )
 
-def display_select_screen(stdscr):
+def display_select_screen(stdscr, save_config_func=None):
     """Display the selection screen with a candy-themed TUI."""
     global search_query, filtered_DIRS, original_DIRS
     init_colors()
@@ -105,9 +105,9 @@ def display_select_screen(stdscr):
     post_search_mode = False
     running = True
 
-    # State variables for column visibility
-    show_id_column = True
-    show_created_column = True
+    # State variables for column visibility, initialized from CONFIG
+    show_id_column = CONFIG.get("show_id_column", True)
+    show_created_column = CONFIG.get("show_created_column", True)
 
     while running:
         max_items = len(filtered_DIRS)
@@ -133,14 +133,14 @@ def display_select_screen(stdscr):
 
         # Handle empty filtered_DIRS before calculating max lengths
         if not filtered_DIRS:
-            max_alias_len = 5 # Default minimum length
+            max_alias_len = 5  # Default minimum length
             max_path_len = 4  # Default minimum length
             max_id_len = 2    # Default minimum length
             # Display a message when no results are found
             no_results_msg = "No matching directories found."
             stdscr.addstr(5, 1, no_results_msg, curses.color_pair(COLOR_WARNING) | curses.A_BOLD)
             # Ensure selected_entry is reset to prevent index errors
-            selected_entry = -1 # Indicate nothing is selected
+            selected_entry = -1  # Indicate nothing is selected
         else:
             max_alias_len = max(max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5)
             max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
@@ -150,33 +150,32 @@ def display_select_screen(stdscr):
             if selected_entry == -1 and max_items > 0:
                 selected_entry = 0
 
-
         # Header
         header_parts = []
         current_header_len = 0
 
         header_parts.append(f"{'ALIAS'.ljust(max_alias_len)}")
-        current_header_len += max_alias_len + 2 # +2 for padding
+        current_header_len += max_alias_len + 2  # +2 for padding
 
         if show_id_column:
             header_parts.append(f"{'ID'.ljust(max_id_len)}")
-            current_header_len += max_id_len + 2 # +2 for padding
+            current_header_len += max_id_len + 2  # +2 for padding
 
         header_parts.append(f"{'PATH'.ljust(max_path_len)}")
-        current_header_len += max_path_len + 2 # +2 for padding
+        current_header_len += max_path_len + 2  # +2 for padding
 
         if show_created_column:
             header_parts.append("CREATED AT")
             # We don't add its length to current_header_len as it's the last element
 
-        header_text = "  ".join(header_parts) # Join with 2 spaces padding
+        header_text = "  ".join(header_parts)  # Join with 2 spaces padding
         stdscr.addstr(3, 1, header_text[:inner_width], curses.color_pair(COLOR_HEADER) | curses.A_BOLD)
 
         draw_hr(stdscr, 4)
 
         # List entries with candy-themed colors
         line_start = 5
-        if filtered_DIRS: # Only draw entries if there are any
+        if filtered_DIRS:  # Only draw entries if there are any
             for entry_id, entry in enumerate(filtered_DIRS.values()):
                 if line_start >= inner_height - 5:
                     break
@@ -214,8 +213,7 @@ def display_select_screen(stdscr):
                     pre_selected_path = entry["path"]
                 line_start += 1
         else:
-            pre_selected_path = None # No path to pre-select if list is empty
-
+            pre_selected_path = None  # No path to pre-select if list is empty
 
         # Controls with bright colors
         controls_y = height - 5
@@ -250,10 +248,9 @@ def display_select_screen(stdscr):
                 f"Command: cd {os.path.abspath(os.path.expanduser(pre_selected_path))}",
                 curses.color_pair(COLOR_ACTION) | curses.A_BOLD,
             )
-        else: # Display help/info when no results and not in other modes
-             if not filtered_DIRS and not search_mode and not confirm_mode:
-                 stdscr.addstr(action_area_y + 1, 1, "Type 's' to search or add new entries.", curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
-
+        else:  # Display help/info when no results and not in other modes
+            if not filtered_DIRS and not search_mode and not confirm_mode:
+                stdscr.addstr(action_area_y + 1, 1, "Type 's' to search or add new entries.", curses.color_pair(COLOR_DEFAULT) | curses.A_BOLD)
 
         stdscr.refresh()
 
@@ -264,8 +261,8 @@ def display_select_screen(stdscr):
         if not filtered_DIRS:
             if key == curses.KEY_UP or key == ord("k") or key == curses.KEY_DOWN or key == ord("j"):
                 # Ignore navigation keys if there's nothing to navigate
-                continue # Skip to next loop iteration
-            if key == ord("\n"): # Cannot select if no items
+                continue  # Skip to next loop iteration
+            if key == ord("\n"):  # Cannot select if no items
                 continue
 
         if search_mode:
@@ -278,32 +275,42 @@ def display_select_screen(stdscr):
             else:
                 try:
                     # Prevent adding non-printable characters to search query
-                    if 32 <= key <= 126: # ASCII printable characters
+                    if 32 <= key <= 126:  # ASCII printable characters
                         search_query += chr(key)
                         filter_dirs_by_search(search_query)
                 except ValueError:
                     pass
         elif post_search_mode:
-            if key == ord("q") or key == 27: # 27 is ESC key
+            if key == ord("q") or key == 27:  # 27 is ESC key
                 filtered_DIRS = original_DIRS
                 post_search_mode = False
-                search_query = "" # Clear search query on exit
-                selected_entry = 0 # Reset selection
+                search_query = ""  # Clear search query on exit
+                selected_entry = 0  # Reset selection
             elif key == curses.KEY_UP or key == ord("k"):
                 selected_entry = max(0, selected_entry - 1)
             elif key == curses.KEY_DOWN or key == ord("j"):
                 selected_entry = min(max_items - 1, selected_entry + 1)
             elif key == ord("\n"):
-                if max_items > 0: # Only return if there's something to select
+                if max_items > 0:  # Only return if there's something to select
                     selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
                     return filtered_DIRS[selected_entry_id]
             elif key == ord("n"):
                 show_id_column = not show_id_column
+                # Save config if save_config_func is provided
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["show_id_column"] = show_id_column
+                    save_config_func(updated_config)
             elif key == ord("t"):
                 show_created_column = not show_created_column
+                # Save config if save_config_func is provided
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["show_created_column"] = show_created_column
+                    save_config_func(updated_config)
         elif confirm_mode:
             if key == ord("\n") and action == "delete":
-                if max_items > 0: # Ensure there's an item to delete
+                if max_items > 0:  # Ensure there's an item to delete
                     selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
                     data = crud.load_data(CONFIG)
                     try:
@@ -313,13 +320,13 @@ def display_select_screen(stdscr):
                         if selected_entry >= len(filtered_DIRS) and len(filtered_DIRS) > 0:
                             selected_entry = len(filtered_DIRS) - 1
                         elif len(filtered_DIRS) == 0:
-                            selected_entry = -1 # No items left
+                            selected_entry = -1  # No items left
                     except KeyError:
                         error_log.error(f"Entry ID {selected_entry_id} not found during deletion attempt")
                 confirm_mode = False
             else:
                 confirm_mode = False
-        else: # Normal navigation mode
+        else:  # Normal navigation mode
             if key == curses.KEY_UP or key == ord("k"):
                 selected_entry = (selected_entry - 1) % max_items if max_items > 0 else -1
             elif key == curses.KEY_DOWN or key == ord("j"):
@@ -331,20 +338,30 @@ def display_select_screen(stdscr):
             elif key == ord("q"):
                 return None
             elif key == ord("d") or key == curses.KEY_BACKSPACE:
-                if max_items > 0: # Only allow delete if there are items
+                if max_items > 0:  # Only allow delete if there are items
                     confirm_mode = True
                     action = "delete"
             elif key == ord("s"):
                 search_mode = True
-                selected_entry = 0 # Reset selection on entering search
-                search_query = "" # Clear previous search query
-                filter_dirs_by_search(search_query) # Reset filtered_DIRS to all
+                selected_entry = 0  # Reset selection on entering search
+                search_query = ""  # Clear previous search query
+                filter_dirs_by_search(search_query)  # Reset filtered_DIRS to all
             elif key == ord("n"):
                 show_id_column = not show_id_column
+                # Save config if save_config_func is provided
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["show_id_column"] = show_id_column
+                    save_config_func(updated_config)
             elif key == ord("t"):
                 show_created_column = not show_created_column
+                # Save config if save_config_func is provided
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["show_created_column"] = show_created_column
+                    save_config_func(updated_config)
 
-def display_select(config, dirs):
+def display_select(config, dirs, save_config_func=None):
     """Wrapper to run the TUI."""
     global CONFIG, DIRS, filtered_DIRS, search_query, original_DIRS
     CONFIG = config
@@ -352,5 +369,4 @@ def display_select(config, dirs):
     filtered_DIRS = DIRS
     original_DIRS = DIRS
     search_query = ""
-    return curses.wrapper(display_select_screen)
-    
+    return curses.wrapper(display_select_screen, save_config_func)
