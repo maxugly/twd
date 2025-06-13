@@ -97,6 +97,8 @@ def display_select_screen(stdscr, save_config_func=None):
     """Display the selection screen with a candy-themed TUI."""
     global search_query, filtered_DIRS, original_DIRS
     init_colors()
+    # Enable mouse events
+    curses.mousemask(curses.BUTTON1_PRESSED)  # Detect left-click
     selected_entry = 0
     pre_selected_path = None
     confirm_mode = False
@@ -175,6 +177,7 @@ def display_select_screen(stdscr, save_config_func=None):
 
         # List entries with candy-themed colors
         line_start = 5
+        entry_rows = {}  # Map row numbers to entry indices for mouse clicks
         if filtered_DIRS:  # Only draw entries if there are any
             for entry_id, entry in enumerate(filtered_DIRS.values()):
                 if line_start >= inner_height - 5:
@@ -211,6 +214,8 @@ def display_select_screen(stdscr, save_config_func=None):
 
                 if entry_id == selected_entry:
                     pre_selected_path = entry["path"]
+                # Store the row for mouse click detection
+                entry_rows[line_start] = entry_id
                 line_start += 1
         else:
             pre_selected_path = None  # No path to pre-select if list is empty
@@ -221,9 +226,9 @@ def display_select_screen(stdscr, save_config_func=None):
         controls_text = (
             "ctrls: enter=select"
             if search_mode
-            else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=exit search  s=search  n=toggle id  t=toggle created"
+            else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete  q=exit search  s=search  n=toggle id  t=toggle created"
             if post_search_mode
-            else "ctrls: ↑/k=up  ↓/j=down  enter=select  d/backspace=delete  q=quit  s=search  n=toggle id  t=toggle created"
+            else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete  q=quit  s=search  n=toggle id  t=toggle created"
         )
         stdscr.addstr(controls_y + 1, 1, controls_text, curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
 
@@ -254,8 +259,25 @@ def display_select_screen(stdscr, save_config_func=None):
 
         stdscr.refresh()
 
-        # Handle key events
-        key = stdscr.getch()
+        # Handle key and mouse events
+        try:
+            key = stdscr.getch()
+        except curses.error:
+            continue  # Handle interrupted getch (e.g., during resize)
+
+        # Handle mouse events
+        if key == curses.KEY_MOUSE:
+            try:
+                _, x, y, _, state = curses.getmouse()
+                if state & curses.BUTTON1_PRESSED:  # Left-click
+                    if y in entry_rows and max_items > 0 and not search_mode and not confirm_mode:
+                        # Update selected entry to highlight it
+                        selected_entry = entry_rows[y]
+                        # Immediately select the entry (mimic Enter key)
+                        selected_entry_id = list(filtered_DIRS.keys())[selected_entry]
+                        return filtered_DIRS[selected_entry_id]
+            except curses.error:
+                pass  # Ignore mouse errors (e.g., invalid mouse event)
 
         # Before handling specific modes, adjust selected_entry for navigation if list is empty
         if not filtered_DIRS:
