@@ -64,6 +64,37 @@ def init_colors():
         curses.init_pair(COLOR_CREATED_AT, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
         curses.init_pair(COLOR_SIZE_READOUT, curses.COLOR_YELLOW, curses.COLOR_BLACK) # Fallback to yellow
 
+def shorten_path(path, mode):
+    """Shorten path based on the selected mode.
+    
+    Args:
+        path: The full path string
+        mode: 0 = full, 1 = medium, 2 = short
+    
+    Returns:
+        Shortened path string
+    """
+    if mode == 0 or not path:
+        return path
+    
+    # Split path into segments
+    segments = [seg for seg in path.split('/') if seg]  # Remove empty segments
+    
+    if len(segments) <= 2:
+        return path  # Too short to meaningfully shorten
+    
+    if mode == 1:  # Medium: keep first 2 and last 2 segments
+        if len(segments) <= 4:
+            return path
+        return '/' + '/'.join(segments[:2]) + '/.../' + '/'.join(segments[-2:])
+    
+    elif mode == 2:  # Short: keep first 1 and last 1 segment
+        if len(segments) <= 2:
+            return path
+        return '/' + segments[0] + '/.../' + segments[-1]
+    
+    return path
+
 def draw_hr(stdscr, y, mode=None):
     """Draw a horizontal rule with bold attribute."""
     _, max_cols = stdscr.getmaxyx()
@@ -129,6 +160,7 @@ def display_select_screen(stdscr, save_config_func=None):
     # State variables for column visibility, initialized from CONFIG
     show_id_column = CONFIG.get("show_id_column", True)
     show_created_column = CONFIG.get("show_created_column", True)
+    path_display_mode = CONFIG.get("path_display_mode", 0)  # 0=full, 1=medium, 2=short
 
     while running:
         max_items = len(filtered_DIRS)
@@ -181,8 +213,9 @@ def display_select_screen(stdscr, save_config_func=None):
         else:
             max_alias_len = max(max(len(entry["alias"]) for entry in filtered_DIRS.values()), 5)
             max_id_len = max(max(len(alias_id) for alias_id in filtered_DIRS.keys()), 2)
-            # Limit max_path_len to fit within terminal width
-            max_path_len = max(max(len(entry["path"]) for entry in filtered_DIRS.values()), 4)
+            # Calculate max_path_len based on shortened paths
+            shortened_paths = [shorten_path(entry["path"], path_display_mode) for entry in filtered_DIRS.values()]
+            max_path_len = max(max(len(path) for path in shortened_paths), 4)
             max_path_len = min(max_path_len, inner_width - max_alias_len - max_id_len - 10)  # Adjust for other columns and padding
             # Ensure selected_entry is within bounds if items were removed
             selected_entry = selected_entry % max_items if max_items > 0 else 0
@@ -200,7 +233,10 @@ def display_select_screen(stdscr, save_config_func=None):
             header_parts.append(f"{'ID'.ljust(max_id_len)}")
             current_header_len += max_id_len + 2  # +2 for padding
 
-        header_parts.append(f"{'PATH'.ljust(max_path_len)}")
+        # Add path display mode indicator to header
+        path_modes = ["PATH", "PATH (MED)", "PATH (SHORT)"]
+        path_header = path_modes[path_display_mode].ljust(max_path_len)
+        header_parts.append(path_header)
         current_header_len += max_path_len + 2  # +2 for padding
 
         if show_created_column:
@@ -253,9 +289,10 @@ def display_select_screen(stdscr, save_config_func=None):
                         pass
                     current_x += 2
 
-                # Path
+                # Path (shortened based on display mode)
+                shortened_path = shorten_path(entry["path"], path_display_mode)
                 try:
-                    draw_path(stdscr, line_start, current_x, entry["path"], max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
+                    draw_path(stdscr, line_start, current_x, shortened_path, max_path_len, COLOR_PATH_TEXT, COLOR_PATH_SLASH, selected=(entry_id == selected_entry))
                 except curses.error:
                     pass
                 current_x += max_path_len
@@ -293,10 +330,10 @@ def display_select_screen(stdscr, save_config_func=None):
         else:
             controls_text = (
                 "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete\n"
-                "q=quit  s=search  n=toggle id  t=toggle created"
+                "q=quit  s=search  n=toggle id  t=toggle created  p=toggle path"
                 if not post_search_mode
                 else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete\n"
-                     "q=exit search  s=search  n=toggle id  t=toggle created"
+                     "q=exit search  s=search  n=toggle id  t=toggle created  p=toggle path"
             )
             # Split controls text into lines and render each
             controls_lines = controls_text.split("\n")
@@ -306,8 +343,8 @@ def display_select_screen(stdscr, save_config_func=None):
                     stdscr.addstr(controls_y + 1 + i, 1, line[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
                 except curses.error:
                     pass
-                # Track positions of 'n' and 't' for clickable toggles
-                for key in ['n', 't']:
+                # Track positions of 'n', 't', and 'p' for clickable toggles
+                for key in ['n', 't', 'p']:
                     if key in line:
                         x_pos = line.index(key) + 1  # +1 for x=1 starting position
                         toggle_key_positions[key] = (controls_y + 1 + i, x_pos)
@@ -385,6 +422,12 @@ def display_select_screen(stdscr, save_config_func=None):
                                     updated_config = CONFIG.copy()
                                     updated_config["show_created_column"] = show_created_column
                                     save_config_func(updated_config)
+                            elif toggle_key == 'p':
+                                path_display_mode = (path_display_mode + 1) % 3
+                                if save_config_func:
+                                    updated_config = CONFIG.copy()
+                                    updated_config["path_display_mode"] = path_display_mode
+                                    save_config_func(updated_config)
                             break
                     # Check for clicks on directory entries
                     if y in entry_rows and max_items > 0 and not search_mode and not confirm_mode:
@@ -447,6 +490,13 @@ def display_select_screen(stdscr, save_config_func=None):
                     updated_config = CONFIG.copy()
                     updated_config["show_created_column"] = show_created_column
                     save_config_func(updated_config)
+            elif key == ord("p"):
+                path_display_mode = (path_display_mode + 1) % 3
+                # Save config if save_config_func is provided
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["path_display_mode"] = path_display_mode
+                    save_config_func(updated_config)
         elif confirm_mode:
             if key == ord("\n") and action == "delete":
                 if max_items > 0:  # Ensure there's an item to delete
@@ -498,6 +548,13 @@ def display_select_screen(stdscr, save_config_func=None):
                 if save_config_func:
                     updated_config = CONFIG.copy()
                     updated_config["show_created_column"] = show_created_column
+                    save_config_func(updated_config)
+            elif key == ord("p"):
+                path_display_mode = (path_display_mode + 1) % 3
+                # Save config if save_config_func is provided
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["path_display_mode"] = path_display_mode
                     save_config_func(updated_config)
 
 def display_select(config, dirs, save_config_func=None):
