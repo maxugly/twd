@@ -139,6 +139,21 @@ def filter_dirs_by_search(query):
         else DIRS
     )
 
+def sort_entries(entries_dict, criteria, descending):
+    """Sort entries based on the specified criteria and order."""
+    items = list(entries_dict.items())
+    
+    if criteria == "alias":
+        items.sort(key=lambda x: x[1]["alias"].lower(), reverse=descending)
+    elif criteria == "id":
+        items.sort(key=lambda x: x[0], reverse=descending)
+    elif criteria == "path":
+        items.sort(key=lambda x: x[1]["path"].lower(), reverse=descending)
+    elif criteria == "created":
+        items.sort(key=lambda x: x[1]["created_at"], reverse=descending)
+    
+    return {k: v for k, v in items}
+
 def display_select_screen(stdscr, save_config_func=None):
     """Display the selection screen with a candy-themed TUI."""
     global search_query, filtered_DIRS, original_DIRS
@@ -161,6 +176,13 @@ def display_select_screen(stdscr, save_config_func=None):
     show_id_column = CONFIG.get("show_id_column", True)
     show_created_column = CONFIG.get("show_created_column", True)
     path_display_mode = CONFIG.get("path_display_mode", 0)  # 0=full, 1=medium, 2=short
+    
+    # Sorting state variables
+    sort_criteria = CONFIG.get("sort_criteria", "alias")
+    sort_descending = CONFIG.get("sort_descending", False)
+
+    # Sort entries initially
+    filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
 
     while running:
         max_items = len(filtered_DIRS)
@@ -318,36 +340,47 @@ def display_select_screen(stdscr, save_config_func=None):
             pre_selected_path = None  # No path to pre-select if list is empty
 
         # Controls with bright colors, split into two lines
-        controls_y = height - 6  # Adjusted for two lines
+        controls_y = height - 7  # Adjusted for three lines
         draw_hr(stdscr, controls_y)
+        
+        # Sorting status line
+        sort_indicator = "↓" if sort_descending else "↑"
+        sort_text = f"Sort: {sort_criteria} {sort_indicator} | Path: {path_modes[path_display_mode]} | Cols: "
+        sort_text += "id " if show_id_column else ""
+        sort_text += "created" if show_created_column else ""
+        try:
+            stdscr.addstr(controls_y + 1, 1, sort_text[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
+        except curses.error:
+            pass
+        
         if search_mode:
             controls_text = "ctrls: enter=select"
             try:
-                stdscr.addstr(controls_y + 1, 1, controls_text[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
+                stdscr.addstr(controls_y + 2, 1, controls_text[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
             except curses.error:
                 pass
             toggle_key_positions = {}  # No toggle keys in search mode
         else:
             controls_text = (
                 "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete\n"
-                "q=quit  s=search  n=toggle id  t=toggle created  p=toggle path"
+                "q=quit  s=search  n=toggle id  t=toggle created  p=toggle path  o=cycle sort  l=toggle order"
                 if not post_search_mode
                 else "ctrls: ↑/k=up  ↓/j=down  enter/click=select  d/backspace=delete\n"
-                     "q=exit search  s=search  n=toggle id  t=toggle created  p=toggle path"
+                     "q=exit search  s=search  n=toggle id  t=toggle created  p=toggle path  o=cycle sort  l=toggle order"
             )
             # Split controls text into lines and render each
             controls_lines = controls_text.split("\n")
             toggle_key_positions = {}  # Map key to (y, x) for clickable toggles
             for i, line in enumerate(controls_lines):
                 try:
-                    stdscr.addstr(controls_y + 1 + i, 1, line[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
+                    stdscr.addstr(controls_y + 2 + i, 1, line[:inner_width - 1], curses.color_pair(COLOR_CONTROLS) | curses.A_BOLD)
                 except curses.error:
                     pass
-                # Track positions of 'n', 't', and 'p' for clickable toggles
-                for key in ['n', 't', 'p']:
+                # Track positions of 'n', 't', 'p', 'o', and 'l' for clickable toggles
+                for key in ['n', 't', 'p', 'o', 'l']:
                     if key in line:
                         x_pos = line.index(key) + 1  # +1 for x=1 starting position
-                        toggle_key_positions[key] = (controls_y + 1 + i, x_pos)
+                        toggle_key_positions[key] = (controls_y + 2 + i, x_pos)
 
         # Action area
         action_area_y = height - 3
@@ -428,6 +461,24 @@ def display_select_screen(stdscr, save_config_func=None):
                                     updated_config = CONFIG.copy()
                                     updated_config["path_display_mode"] = path_display_mode
                                     save_config_func(updated_config)
+                            elif toggle_key == 'o':
+                                # Cycle through sort criteria
+                                criteria_options = ["alias", "id", "path", "created"]
+                                current_index = criteria_options.index(sort_criteria)
+                                sort_criteria = criteria_options[(current_index + 1) % len(criteria_options)]
+                                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
+                                if save_config_func:
+                                    updated_config = CONFIG.copy()
+                                    updated_config["sort_criteria"] = sort_criteria
+                                    save_config_func(updated_config)
+                            elif toggle_key == 'l':
+                                # Toggle sort order
+                                sort_descending = not sort_descending
+                                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
+                                if save_config_func:
+                                    updated_config = CONFIG.copy()
+                                    updated_config["sort_descending"] = sort_descending
+                                    save_config_func(updated_config)
                             break
                     # Check for clicks on directory entries
                     if y in entry_rows and max_items > 0 and not search_mode and not confirm_mode:
@@ -454,17 +505,20 @@ def display_select_screen(stdscr, save_config_func=None):
             elif key == curses.KEY_BACKSPACE or key == 127:
                 search_query = search_query[:-1]
                 filter_dirs_by_search(search_query)
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
             else:
                 try:
                     # Prevent adding non-printable characters to search query
                     if 32 <= key <= 126:  # ASCII printable characters
                         search_query += chr(key)
                         filter_dirs_by_search(search_query)
+                        filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
                 except ValueError:
                     pass
         elif post_search_mode:
             if key == ord("q") or key == 27:  # 27 is ESC key
                 filtered_DIRS = original_DIRS
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
                 post_search_mode = False
                 search_query = ""  # Clear search query on exit
                 selected_entry = 0  # Reset selection
@@ -496,6 +550,24 @@ def display_select_screen(stdscr, save_config_func=None):
                 if save_config_func:
                     updated_config = CONFIG.copy()
                     updated_config["path_display_mode"] = path_display_mode
+                    save_config_func(updated_config)
+            elif key == ord("o"):
+                # Cycle through sort criteria
+                criteria_options = ["alias", "id", "path", "created"]
+                current_index = criteria_options.index(sort_criteria)
+                sort_criteria = criteria_options[(current_index + 1) % len(criteria_options)]
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["sort_criteria"] = sort_criteria
+                    save_config_func(updated_config)
+            elif key == ord("l"):
+                # Toggle sort order
+                sort_descending = not sort_descending
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["sort_descending"] = sort_descending
                     save_config_func(updated_config)
         elif confirm_mode:
             if key == ord("\n") and action == "delete":
@@ -535,6 +607,7 @@ def display_select_screen(stdscr, save_config_func=None):
                 selected_entry = 0  # Reset selection on entering search
                 search_query = ""  # Clear previous search query
                 filter_dirs_by_search(search_query)  # Reset filtered_DIRS to all
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
             elif key == ord("n"):
                 show_id_column = not show_id_column
                 # Save config if save_config_func is provided
@@ -555,6 +628,24 @@ def display_select_screen(stdscr, save_config_func=None):
                 if save_config_func:
                     updated_config = CONFIG.copy()
                     updated_config["path_display_mode"] = path_display_mode
+                    save_config_func(updated_config)
+            elif key == ord("o"):
+                # Cycle through sort criteria
+                criteria_options = ["alias", "id", "path", "created"]
+                current_index = criteria_options.index(sort_criteria)
+                sort_criteria = criteria_options[(current_index + 1) % len(criteria_options)]
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["sort_criteria"] = sort_criteria
+                    save_config_func(updated_config)
+            elif key == ord("l"):
+                # Toggle sort order
+                sort_descending = not sort_descending
+                filtered_DIRS = sort_entries(filtered_DIRS, sort_criteria, sort_descending)
+                if save_config_func:
+                    updated_config = CONFIG.copy()
+                    updated_config["sort_descending"] = sort_descending
                     save_config_func(updated_config)
 
 def display_select(config, dirs, save_config_func=None):
